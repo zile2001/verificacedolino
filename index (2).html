@@ -1,0 +1,2704 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Cedolino">
+<meta name="theme-color" content="#f5f1ea">
+<title>Cedolino — Controllo ore e buste paga</title>
+<link rel="apple-touch-icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 180 180'%3E%3Crect width='180' height='180' fill='%23f5f1ea'/%3E%3Ctext x='90' y='115' font-family='serif' font-size='90' text-anchor='middle' fill='%237a1f2b'%3E€%3C/text%3E%3C/svg%3E">
+<link rel="manifest" href="/manifest.json">
+
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+
+<style>
+:root {
+  --bg: #f5f1ea;
+  --bg-soft: #ebe5d8;
+  --ink: #1a1815;
+  --ink-soft: #5a564e;
+  --line: #c9c2b3;
+  --line-soft: #d9d3c4;
+  --accent: #7a1f2b;
+  --accent-soft: #a8424f;
+  --good: #2d5a3d;
+  --warn: #b8780f;
+  --bad: #a83232;
+  --paper: #fdfaf3;
+  --shadow: 0 1px 0 rgba(26,24,21,.04), 0 4px 16px rgba(26,24,21,.05);
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1a1815;
+    --bg-soft: #252220;
+    --ink: #f5f1ea;
+    --ink-soft: #a8a297;
+    --line: #3a3631;
+    --line-soft: #2a2724;
+    --accent: #c87482;
+    --accent-soft: #a8424f;
+    --paper: #1f1d1a;
+    --shadow: 0 1px 0 rgba(0,0,0,.3), 0 4px 16px rgba(0,0,0,.4);
+  }
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+html, body { background: var(--bg); color: var(--ink); font-family: 'IBM Plex Sans', system-ui, sans-serif; -webkit-font-smoothing: antialiased; overflow-x: hidden; }
+body { padding: env(safe-area-inset-top) 0 calc(env(safe-area-inset-bottom) + 80px) 0; min-height: 100vh; }
+
+/* TYPOGRAPHY */
+h1, h2, h3 { font-family: 'Fraunces', Georgia, serif; font-weight: 500; letter-spacing: -0.02em; line-height: 1.1; }
+h1 { font-size: 2.4rem; }
+h2 { font-size: 1.5rem; }
+h3 { font-size: 1.05rem; font-weight: 600; }
+.mono { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; }
+.label { font-size: .7rem; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-soft); font-weight: 500; }
+.muted { color: var(--ink-soft); }
+.small { font-size: .85rem; }
+.tiny { font-size: .75rem; }
+
+/* HEADER */
+header.brand {
+  padding: 20px 22px 16px;
+  display: flex; align-items: baseline; justify-content: space-between;
+  border-bottom: 1px solid var(--line-soft);
+}
+.brand-title { font-family: 'Fraunces', serif; font-weight: 700; font-size: 1.4rem; letter-spacing: -.03em; }
+.brand-title em { font-style: italic; font-weight: 400; color: var(--accent); }
+.brand-sub { font-size: .72rem; text-transform: uppercase; letter-spacing: .15em; color: var(--ink-soft); }
+
+/* TABS */
+nav.tabs {
+  position: fixed; bottom: 0; left: 0; right: 0;
+  background: var(--bg);
+  border-top: 1px solid var(--line-soft);
+  padding: 8px 8px calc(env(safe-area-inset-bottom) + 8px);
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px;
+  z-index: 100;
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+}
+nav.tabs button {
+  background: transparent; border: 0; padding: 10px 4px;
+  font-family: 'IBM Plex Sans', sans-serif; font-size: .68rem;
+  color: var(--ink-soft); cursor: pointer; font-weight: 500;
+  display: flex; flex-direction: column; align-items: center; gap: 4px;
+  border-radius: 10px; transition: all .2s;
+  text-transform: uppercase; letter-spacing: .08em;
+}
+nav.tabs button .ico { font-family: 'Fraunces', serif; font-size: 1.4rem; font-weight: 400; line-height: 1; }
+nav.tabs button.active { color: var(--accent); background: var(--bg-soft); }
+
+/* SECTIONS */
+main { padding: 0 0 24px; }
+.section { display: none; padding: 18px 22px; }
+.section.active { display: block; animation: fade .3s ease; }
+@keyframes fade { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
+
+.section-head { margin: 4px 0 18px; }
+.section-head h2 { margin-bottom: 4px; }
+.section-head .muted { font-size: .9rem; }
+
+/* CARDS */
+.card {
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  border-radius: 14px;
+  padding: 18px;
+  margin-bottom: 14px;
+  box-shadow: var(--shadow);
+}
+.card.flat { box-shadow: none; }
+.card.accent { background: var(--accent); color: #fdfaf3; border-color: var(--accent); }
+.card.accent .label, .card.accent .muted { color: rgba(253,250,243,.7); }
+
+/* BIG NUMBER */
+.bignum {
+  font-family: 'Fraunces', serif;
+  font-size: 2.6rem;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+  line-height: 1;
+  font-variant-numeric: tabular-nums;
+}
+.bignum .cents { font-size: 1.4rem; opacity: .55; }
+
+/* GRID */
+.grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.grid-2 .card { margin-bottom: 0; }
+.kv { display: flex; justify-content: space-between; align-items: baseline; padding: 9px 0; border-bottom: 1px dashed var(--line-soft); }
+.kv:last-child { border-bottom: 0; }
+.kv .k { color: var(--ink-soft); font-size: .9rem; }
+.kv .v { font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-variant-numeric: tabular-nums; }
+
+/* BUTTONS */
+button.btn {
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: .92rem; font-weight: 500;
+  padding: 14px 18px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  color: var(--ink);
+  cursor: pointer;
+  width: 100%;
+  transition: all .15s;
+  letter-spacing: -.01em;
+}
+button.btn:active { transform: scale(.98); }
+button.btn.primary { background: var(--accent); color: #fdfaf3; border-color: var(--accent); }
+button.btn.ghost { background: transparent; border: 1px solid var(--line); }
+button.btn.danger { color: var(--bad); border-color: rgba(168,50,50,.3); }
+button.btn.sm { padding: 10px 14px; font-size: .85rem; }
+.btn-row { display: flex; gap: 10px; }
+.btn-row .btn { flex: 1; }
+
+/* FORMS */
+.field { margin-bottom: 14px; }
+.field label { display: block; font-size: .75rem; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-soft); margin-bottom: 6px; font-weight: 500; }
+.field input, .field select, .field textarea {
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .95rem;
+  font-variant-numeric: tabular-nums;
+  -webkit-appearance: none;
+  appearance: none;
+}
+.field input:focus, .field select:focus { outline: 2px solid var(--accent); outline-offset: -1px; border-color: transparent; }
+.field-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+/* CHIPS / TAGS */
+.chip {
+  display: inline-block;
+  padding: 4px 10px;
+  border-radius: 100px;
+  font-size: .7rem;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  background: var(--bg-soft);
+  color: var(--ink-soft);
+}
+.chip.good { background: rgba(45,90,61,.12); color: var(--good); }
+.chip.warn { background: rgba(184,120,15,.15); color: var(--warn); }
+.chip.bad { background: rgba(168,50,50,.12); color: var(--bad); }
+.chip.accent { background: rgba(122,31,43,.1); color: var(--accent); }
+
+/* SHIFT ITEM (usato in lista cedolini) */
+.shift-item {
+  display: grid;
+  grid-template-columns: 56px 1fr auto;
+  gap: 14px;
+  padding: 14px 0;
+  border-bottom: 1px solid var(--line-soft);
+  align-items: center;
+}
+.shift-item:last-child { border-bottom: 0; }
+.shift-date {
+  font-family: 'Fraunces', serif;
+  text-align: center;
+  line-height: 1;
+}
+.shift-date .day { font-size: 1.8rem; font-weight: 500; }
+.shift-date .month { font-size: .65rem; text-transform: uppercase; letter-spacing: .15em; color: var(--ink-soft); margin-top: 4px; }
+.shift-info .time { font-family: 'IBM Plex Mono', monospace; font-weight: 500; font-size: .95rem; }
+.shift-info .meta { font-size: .75rem; color: var(--ink-soft); margin-top: 2px; }
+.shift-hours { font-family: 'IBM Plex Mono', monospace; font-weight: 600; font-size: 1.1rem; text-align: right; }
+.shift-hours .small { font-size: .7rem; color: var(--ink-soft); display: block; }
+
+/* WEEK VIEW */
+.week-nav {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.week-nav-btn {
+  height: 44px; width: 44px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 12px;
+  font-family: 'Fraunces', serif;
+  font-size: 1.5rem;
+  color: var(--ink);
+  cursor: pointer;
+  font-weight: 400;
+}
+.week-nav-btn:active { background: var(--bg-soft); }
+.week-nav-title { text-align: center; }
+.week-label { font-size: .7rem; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-soft); font-weight: 500; }
+.week-range { font-size: .95rem; font-weight: 500; margin-top: 2px; }
+
+.week-progress { height: 6px; background: var(--bg-soft); border-radius: 3px; overflow: hidden; margin-top: 14px; }
+.week-progress-bar { height: 100%; background: var(--accent); transition: width .3s, background .3s; }
+.week-progress-bar.over { background: var(--warn); }
+.week-progress-bar.complete { background: var(--good); }
+
+/* SEZIONE FERIE */
+.year-nav {
+  display: grid;
+  grid-template-columns: 44px 1fr 44px;
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+.year-nav-title { text-align: center; }
+.year-label { font-family: 'Fraunces', serif; font-size: 1.4rem; font-weight: 500; line-height: 1; }
+.year-sub { font-size: .72rem; text-transform: uppercase; letter-spacing: .15em; color: var(--ink-soft); margin-top: 4px; }
+
+.ferie-card { background: var(--accent); color: #fdfaf3; border-color: var(--accent); }
+.ferie-card .label { color: rgba(253,250,243,.65); }
+.rol-card { background: var(--paper); }
+
+.ferie-head { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; margin-bottom: 18px; }
+.ferie-progress-ring { position: relative; width: 80px; height: 80px; }
+.ferie-ring-center {
+  position: absolute; inset: 0;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  text-align: center;
+}
+
+.ferie-stats {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  padding-top: 14px;
+  border-top: 1px solid rgba(253,250,243,.18);
+}
+.rol-card .ferie-stats { border-top-color: var(--line-soft); }
+.ferie-stats > div { text-align: center; }
+
+.bar-track { height: 8px; background: var(--bg-soft); border-radius: 4px; overflow: hidden; }
+.bar-fill { height: 100%; transition: width .5s ease, background .3s; }
+.bar-fill.good { background: var(--good); }
+.bar-fill.warn { background: var(--warn); }
+
+.ferie-history-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 10px;
+  padding: 12px 0;
+  border-bottom: 1px dashed var(--line-soft);
+  align-items: center;
+}
+.ferie-history-item:last-child { border-bottom: 0; }
+.ferie-history-item .fh-range { font-weight: 500; font-size: .95rem; }
+.ferie-history-item .fh-dates { font-size: .75rem; color: var(--ink-soft); margin-top: 2px; }
+.ferie-history-item .fh-count { font-family: 'IBM Plex Mono', monospace; font-weight: 600; color: var(--accent); font-size: 1rem; }
+
+.quick-actions {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+/* DAY ROW */
+.day-row {
+  display: grid;
+  grid-template-columns: 48px 1fr auto;
+  gap: 12px;
+  align-items: center;
+  background: var(--paper);
+  border: 1px solid var(--line-soft);
+  border-radius: 12px;
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.day-row:active { transform: scale(.98); }
+.day-row.today { border-color: var(--accent); border-width: 1.5px; }
+.day-row.pre-contratto { opacity: .45; background: repeating-linear-gradient(135deg, var(--bg-soft), var(--bg-soft) 6px, transparent 6px, transparent 12px); }
+.day-row.pre-contratto .day-marker .dnum { color: var(--ink-soft); }
+.day-row.status-malattia, .day-row.status-ferie, .day-row.status-permesso {
+  background: var(--bg-soft);
+}
+.day-row.status-festivo, .day-row.status-riposo { opacity: .65; }
+
+.day-marker {
+  text-align: center;
+  font-family: 'Fraunces', serif;
+  line-height: 1;
+}
+.day-marker .dname { font-size: .65rem; text-transform: uppercase; letter-spacing: .12em; color: var(--ink-soft); font-weight: 600; }
+.day-marker .dnum { font-size: 1.6rem; font-weight: 500; margin-top: 4px; }
+.day-row.today .day-marker .dnum { color: var(--accent); }
+
+.day-info { min-width: 0; }
+.day-info .time {
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: .92rem;
+  font-weight: 500;
+}
+.day-info .meta {
+  font-size: .72rem;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+.day-info .empty-day {
+  color: var(--ink-soft);
+  font-size: .85rem;
+  font-style: italic;
+}
+
+.day-hours {
+  font-family: 'IBM Plex Mono', monospace;
+  font-weight: 600;
+  font-size: 1rem;
+  text-align: right;
+  min-width: 50px;
+}
+.day-hours .sub { display: block; font-size: .68rem; color: var(--ink-soft); font-weight: 400; margin-top: 1px; }
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: .68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .04em;
+}
+.status-malattia .status-badge { background: rgba(184,120,15,.15); color: var(--warn); }
+.status-ferie .status-badge { background: rgba(45,90,61,.12); color: var(--good); }
+.status-permesso .status-badge { background: rgba(122,31,43,.1); color: var(--accent); }
+.status-festivo .status-badge { background: var(--bg-soft); color: var(--ink-soft); }
+.status-riposo .status-badge { background: var(--bg-soft); color: var(--ink-soft); }
+
+/* STATUS PICKER */
+.status-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+}
+.status-btn {
+  padding: 12px 4px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  border-radius: 10px;
+  font-family: 'IBM Plex Sans', sans-serif;
+  font-size: .8rem;
+  font-weight: 500;
+  cursor: pointer;
+  color: var(--ink);
+  text-align: center;
+  transition: all .15s;
+}
+.status-btn:active { transform: scale(.96); }
+.status-btn.selected {
+  background: var(--accent);
+  color: #fdfaf3;
+  border-color: var(--accent);
+}
+
+/* MONTH SUMMARY */
+.month-week-row {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px dashed var(--line-soft);
+  align-items: center;
+  font-size: .88rem;
+}
+.month-week-row:last-child { border-bottom: 0; }
+.month-week-row .wname { color: var(--ink-soft); }
+.month-week-row .whrs { font-family: 'IBM Plex Mono', monospace; font-weight: 600; }
+.month-week-row .chip { font-size: .65rem; padding: 2px 6px; }
+
+/* OCR */
+.ocr-drop {
+  border: 2px dashed var(--line);
+  border-radius: 12px;
+  padding: 30px 20px;
+  text-align: center;
+  background: var(--bg-soft);
+  cursor: pointer;
+}
+.ocr-drop .ico { font-family: 'Fraunces', serif; font-size: 2.4rem; color: var(--accent); display: block; margin-bottom: 6px; }
+.ocr-result { margin-top: 14px; }
+.ocr-progress { height: 4px; background: var(--bg-soft); border-radius: 2px; overflow: hidden; margin-top: 10px; }
+.ocr-progress-bar { height: 100%; background: var(--accent); width: 0%; transition: width .3s; }
+.ocr-text { background: var(--bg-soft); padding: 12px; border-radius: 8px; font-family: 'IBM Plex Mono', monospace; font-size: .72rem; max-height: 220px; overflow-y: auto; white-space: pre-wrap; word-break: break-word; margin-top: 12px; line-height: 1.5; }
+
+/* COMPARISON */
+.compare-row { display: grid; grid-template-columns: 1fr auto auto auto; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--line-soft); align-items: center; font-size: .9rem; }
+.compare-row:last-child { border-bottom: 0; }
+.compare-row .name { color: var(--ink-soft); }
+.compare-row .val { font-family: 'IBM Plex Mono', monospace; font-variant-numeric: tabular-nums; min-width: 70px; text-align: right; font-weight: 500; }
+.compare-row .delta { font-family: 'IBM Plex Mono', monospace; font-size: .75rem; font-weight: 600; min-width: 50px; text-align: right; }
+.compare-row .delta.good { color: var(--good); }
+.compare-row .delta.bad { color: var(--bad); }
+.compare-row .delta.zero { color: var(--ink-soft); }
+
+/* MISC */
+.divider { height: 1px; background: var(--line-soft); margin: 20px 0; }
+.empty { text-align: center; padding: 40px 20px; color: var(--ink-soft); }
+.empty .ico { font-family: 'Fraunces', serif; font-size: 3rem; color: var(--line); display: block; margin-bottom: 10px; }
+.tag { display: inline-block; padding: 2px 6px; background: var(--bg-soft); border-radius: 4px; font-size: .65rem; color: var(--ink-soft); font-weight: 500; }
+
+/* MODAL */
+.modal-bg { position: fixed; inset: 0; background: rgba(26,24,21,.4); backdrop-filter: blur(8px); display: none; z-index: 200; align-items: flex-end; justify-content: center; }
+.modal-bg.show { display: flex; }
+.modal { background: var(--paper); border-radius: 18px 18px 0 0; padding: 22px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; animation: slide .3s cubic-bezier(.2,.8,.2,1); }
+@keyframes slide { from { transform: translateY(100%);} to { transform: translateY(0);} }
+.modal h2 { margin-bottom: 14px; }
+
+@media (min-width: 600px) {
+  body { max-width: 480px; margin: 0 auto; border-left: 1px solid var(--line-soft); border-right: 1px solid var(--line-soft); min-height: 100vh; }
+  nav.tabs { max-width: 480px; margin: 0 auto; }
+}
+</style>
+</head>
+<body>
+
+<header class="brand">
+  <div>
+    <div class="brand-title">Cedolino<em>.</em></div>
+    <div class="brand-sub">Controllo Ore & Busta Paga</div>
+  </div>
+  <div class="mono small muted" id="todayDate"></div>
+</header>
+
+<main>
+
+<!-- DASHBOARD -->
+<section class="section active" id="sec-dashboard">
+  <div class="section-head">
+    <h2 id="monthTitle">Questo mese</h2>
+    <div class="muted small" id="monthRange"></div>
+  </div>
+
+  <div class="card accent">
+    <div class="label" style="margin-bottom: 8px;">Stipendio stimato lordo</div>
+    <div class="bignum mono" id="estLordo">€ 0<span class="cents">,00</span></div>
+    <div style="display: flex; justify-content: space-between; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(253,250,243,.2);">
+      <div>
+        <div class="label">Netto stimato</div>
+        <div class="mono" style="font-size: 1.2rem; font-weight: 600;" id="estNetto">€ 0,00</div>
+      </div>
+      <div style="text-align: right;">
+        <div class="label">Ore lavorate</div>
+        <div class="mono" style="font-size: 1.2rem; font-weight: 600;" id="estOre">0,00 h</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="grid-2">
+    <div class="card">
+      <div class="label">Ore ordinarie</div>
+      <div class="mono" style="font-size: 1.4rem; font-weight: 600; margin-top: 4px;" id="oreOrd">0</div>
+      <div class="tiny muted" id="oreOrdTarget">su 105/mese</div>
+    </div>
+    <div class="card">
+      <div class="label">Maggiorate</div>
+      <div class="mono" style="font-size: 1.4rem; font-weight: 600; margin-top: 4px;" id="oreMagg">0</div>
+      <div class="tiny muted">supplementari / festive</div>
+    </div>
+  </div>
+
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
+      <h3>Composizione lorda</h3>
+      <span class="chip accent" id="livelloChip">7° livello</span>
+    </div>
+    <div id="composizione"></div>
+  </div>
+
+  <div class="card flat" style="background: var(--bg-soft); border: 0;">
+    <div class="label">Promemoria</div>
+    <p class="small" style="margin-top: 6px; line-height: 1.5;" id="promemoria">Le stime sono indicative. Verifica sempre la busta paga reale tramite la sezione apposita.</p>
+  </div>
+</section>
+
+<!-- TURNI -->
+<section class="section" id="sec-turni">
+  <div class="section-head">
+    <h2>Pianifica settimana</h2>
+    <div class="muted small">Lun-Sab • 25h totali • un sabato sì, uno no</div>
+  </div>
+
+  <!-- Navigatore settimana -->
+  <div class="week-nav">
+    <button class="week-nav-btn" id="btnPrevWeek">‹</button>
+    <div class="week-nav-title">
+      <div class="week-label" id="weekLabel">Settimana</div>
+      <div class="week-range mono" id="weekRange">—</div>
+    </div>
+    <button class="week-nav-btn" id="btnNextWeek">›</button>
+  </div>
+
+  <!-- Navigazione rapida -->
+  <div class="quick-actions" style="margin-bottom: 12px;">
+    <button class="btn ghost sm" id="btnGoToday">📍 Oggi</button>
+    <button class="btn ghost sm" id="btnGoStart">⚑ Inizio contratto</button>
+  </div>
+
+  <!-- Riepilogo settimana -->
+  <div class="card" id="weekSummary">
+    <div style="display: flex; justify-content: space-between; align-items: baseline;">
+      <div>
+        <div class="label">Ore pianificate</div>
+        <div class="mono" style="font-size: 2rem; font-weight: 600; line-height: 1;" id="weekHours">0,00 h</div>
+      </div>
+      <div style="text-align: right;">
+        <div class="label">Target</div>
+        <div class="mono" style="font-size: 1.1rem; font-weight: 600;" id="weekTarget">25,00 h</div>
+        <div class="tiny" id="weekDelta" style="margin-top: 2px;">—</div>
+      </div>
+    </div>
+    <div class="week-progress"><div class="week-progress-bar" id="weekProgressBar" style="width:0%"></div></div>
+    <div class="tiny muted" id="weekInfo" style="margin-top: 6px;"></div>
+  </div>
+
+  <!-- Svuota settimana -->
+  <div style="text-align: center; margin-bottom: 14px;">
+    <button class="btn ghost sm" id="btnClearWeek" style="color: var(--bad); max-width: 240px; margin: 0 auto;">⊗ Svuota settimana</button>
+  </div>
+  <div class="tiny muted" style="text-align: center; margin-bottom: 14px;">Tocca un giorno qui sotto per impostare orario e stato</div>
+
+  <!-- Lista giorni della settimana -->
+  <div id="weekDays"></div>
+
+  <div class="btn-row" style="margin-top: 14px;">
+    <button class="btn ghost sm" id="btnCopyWeek">⎘ Copia da sett. precedente</button>
+    <button class="btn ghost sm" id="btnExport">↓ Esporta CSV</button>
+  </div>
+
+  <!-- Storico mese -->
+  <div class="divider"></div>
+  <h3 style="margin-bottom: 10px;">Riepilogo del mese</h3>
+  <div class="card" id="monthSummary">
+    <div id="monthSummaryBody"></div>
+  </div>
+</section>
+
+<!-- BUSTA PAGA -->
+<section class="section" id="sec-busta">
+  <div class="section-head">
+    <h2>Busta paga</h2>
+    <div class="muted small">Scansiona e verifica la corrispondenza</div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom: 12px;">Carica cedolino</h3>
+
+    <div id="ocrUpload">
+      <div class="btn-row" style="margin-bottom: 10px;">
+        <button class="btn primary" id="btnTakePhoto">📷 Scatta foto</button>
+        <button class="btn ghost" id="btnPickFile">🖼️ Galleria</button>
+      </div>
+      <button class="btn ghost sm" id="btnManualEntry" style="margin-bottom: 10px;">✎ Inserisci manualmente (senza foto)</button>
+      <div class="tiny muted" style="text-align: center;">JPG, PNG • elaborazione locale, nulla viene caricato online</div>
+
+      <input type="file" id="ocrFileCamera" accept="image/*" capture="environment" style="display:none;">
+      <input type="file" id="ocrFileGallery" accept="image/*" style="display:none;">
+    </div>
+
+    <div id="ocrPreview" style="display:none;">
+      <div style="position: relative; margin-bottom: 12px; border-radius: 10px; overflow: hidden; background: var(--bg-soft);">
+        <img id="ocrPreviewImg" style="width: 100%; max-height: 280px; object-fit: contain; display: block;">
+      </div>
+      <div class="ocr-result" id="ocrResult" style="display:none; margin-bottom: 12px;">
+        <div class="label" style="display: flex; justify-content: space-between; align-items: center;">
+          <span id="ocrStatus">Preparazione…</span>
+          <span class="mono" id="ocrPercent">0%</span>
+        </div>
+        <div class="ocr-progress"><div class="ocr-progress-bar" id="ocrBar"></div></div>
+      </div>
+      <div class="btn-row">
+        <button class="btn primary" id="btnRunOcr">🔍 Leggi cedolino</button>
+        <button class="btn ghost" id="btnRetake">↺ Cambia</button>
+      </div>
+    </div>
+
+    <div id="ocrError" style="display:none; margin-top: 12px; padding: 12px; background: rgba(168,50,50,.08); border: 1px solid rgba(168,50,50,.2); border-radius: 8px;">
+      <div class="small" style="color: var(--bad); font-weight: 600;">⚠ Errore</div>
+      <div class="tiny" id="ocrErrorMsg" style="margin-top: 4px;"></div>
+      <button class="btn ghost sm" id="btnDismissError" style="margin-top: 10px;">Chiudi</button>
+    </div>
+  </div>
+
+  <div id="ocrCompare" style="display:none;">
+    <div class="card" id="oreVerdict" style="background: var(--bg-soft); border: 0;">
+      <div class="label">Verdetto ore</div>
+      <div id="oreVerdictBody" style="margin-top: 8px;"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom: 6px;">Confronto cedolino ↔ teorico</h3>
+      <div class="tiny muted" style="margin-bottom: 12px;">Δ verde = uguale o a tuo favore. Δ rosso = differenza sospetta.</div>
+      <div id="compareList"></div>
+    </div>
+
+    <div class="card">
+      <h3 style="margin-bottom: 10px;">Testo riconosciuto</h3>
+      <div class="tiny muted" style="margin-bottom: 8px;">Modifica manualmente i valori se l'OCR ha sbagliato. Tocca un valore per correggerlo.</div>
+      <div id="manualValues"></div>
+      <button class="btn ghost sm" id="btnShowRaw" style="margin-top: 10px;">Mostra testo grezzo OCR</button>
+      <div class="ocr-text" id="ocrRaw" style="display:none;"></div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn ghost" id="btnSaveBusta">Salva confronto</button>
+      <button class="btn danger ghost" id="btnDiscardOcr">Scarta</button>
+    </div>
+  </div>
+
+  <h3 style="margin: 24px 0 10px;">Cedolini salvati</h3>
+  <div class="card" id="bustaList">
+    <div class="empty"><span class="ico">∅</span><div class="small">Nessun cedolino salvato</div></div>
+  </div>
+</section>
+
+<!-- FERIE & PERMESSI -->
+<section class="section" id="sec-ferie">
+  <div class="section-head">
+    <h2>Ferie & Permessi</h2>
+    <div class="muted small">Maturazione, godimento e disponibilità — CCNL Commercio</div>
+  </div>
+
+  <!-- Selezione anno -->
+  <div class="year-nav">
+    <button class="week-nav-btn" id="btnYearPrev">‹</button>
+    <div class="year-nav-title">
+      <div class="year-label" id="yearLabel">2026</div>
+      <div class="year-sub mono" id="yearSub">—</div>
+    </div>
+    <button class="week-nav-btn" id="btnYearNext">›</button>
+  </div>
+
+  <!-- CARD FERIE -->
+  <div class="card ferie-card">
+    <div class="ferie-head">
+      <div>
+        <div class="label">Ferie</div>
+        <div style="font-family: 'Fraunces', serif; font-size: 1.2rem; font-weight: 500; margin-top: 2px;">Anno <span id="ferieYearShow">2026</span></div>
+      </div>
+      <div class="ferie-progress-ring">
+        <svg viewBox="0 0 100 100" width="80" height="80">
+          <circle cx="50" cy="50" r="42" stroke="rgba(253,250,243,.18)" stroke-width="8" fill="none"/>
+          <circle cx="50" cy="50" r="42" stroke="#fdfaf3" stroke-width="8" fill="none"
+            stroke-linecap="round" id="ferieCircle"
+            stroke-dasharray="263.89" stroke-dashoffset="263.89"
+            transform="rotate(-90 50 50)"
+            style="transition: stroke-dashoffset .6s ease;"/>
+        </svg>
+        <div class="ferie-ring-center">
+          <div class="mono" style="font-size: 1.6rem; font-weight: 600; line-height: 1;" id="ferieRingNum">0</div>
+          <div class="tiny" style="opacity: .75;">disponibili</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ferie-stats">
+      <div>
+        <div class="label" style="color: rgba(253,250,243,.6);">Maturate</div>
+        <div class="mono" style="font-size: 1.3rem; font-weight: 600;" id="ferieMaturate">0,00</div>
+      </div>
+      <div>
+        <div class="label" style="color: rgba(253,250,243,.6);">Godute</div>
+        <div class="mono" style="font-size: 1.3rem; font-weight: 600;" id="ferieGodute">0</div>
+      </div>
+      <div>
+        <div class="label" style="color: rgba(253,250,243,.6);">Totale anno</div>
+        <div class="mono" style="font-size: 1.3rem; font-weight: 600;" id="ferieTotali">26</div>
+      </div>
+    </div>
+    <div class="tiny" style="color: rgba(253,250,243,.55); margin-top: 12px; text-align: center;" id="ferieRefDate">—</div>
+  </div>
+
+  <!-- MATURAZIONE DEL MESE -->
+  <div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
+      <h3>Maturazione del mese</h3>
+      <span class="chip" id="meseChipFerie">—</span>
+    </div>
+    <div style="margin-bottom: 6px;">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 4px;">
+        <span class="tiny muted">Rateo mensile</span>
+        <span class="mono" style="font-weight: 600;"><span id="rateoMese">0,00</span> / 2,17 giorni</span>
+      </div>
+      <div class="bar-track"><div class="bar-fill" id="rateoBar" style="width: 0%; background: var(--accent);"></div></div>
+      <div class="tiny muted" style="text-align: right; margin-top: 4px;" id="rateoPct">0%</div>
+    </div>
+    <div class="tiny muted" style="margin-top: 12px; line-height: 1.5;" id="rateoNote">—</div>
+  </div>
+
+  <!-- CARD PERMESSI ROL -->
+  <div class="card rol-card">
+    <div class="ferie-head">
+      <div>
+        <div class="label">Permessi (ROL)</div>
+        <div style="font-family: 'Fraunces', serif; font-size: 1.2rem; font-weight: 500; margin-top: 2px;">In ore</div>
+      </div>
+      <div class="ferie-progress-ring">
+        <svg viewBox="0 0 100 100" width="80" height="80">
+          <circle cx="50" cy="50" r="42" stroke="rgba(26,24,21,.08)" stroke-width="8" fill="none"/>
+          <circle cx="50" cy="50" r="42" stroke="var(--accent)" stroke-width="8" fill="none"
+            stroke-linecap="round" id="rolCircle"
+            stroke-dasharray="263.89" stroke-dashoffset="263.89"
+            transform="rotate(-90 50 50)"
+            style="transition: stroke-dashoffset .6s ease;"/>
+        </svg>
+        <div class="ferie-ring-center" style="color: var(--ink);">
+          <div class="mono" style="font-size: 1.4rem; font-weight: 600; line-height: 1; color: var(--accent);" id="rolRingNum">0</div>
+          <div class="tiny muted">ore disp.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="ferie-stats" style="color: var(--ink);">
+      <div>
+        <div class="label">Maturati</div>
+        <div class="mono" style="font-size: 1.2rem; font-weight: 600;"><span id="rolMaturati">0,0</span>h</div>
+      </div>
+      <div>
+        <div class="label">Goduti</div>
+        <div class="mono" style="font-size: 1.2rem; font-weight: 600;"><span id="rolGoduti">0</span>h</div>
+      </div>
+      <div>
+        <div class="label">Totale anno</div>
+        <div class="mono" style="font-size: 1.2rem; font-weight: 600;"><span id="rolTotali">35</span>h</div>
+      </div>
+    </div>
+    <div class="tiny muted" style="margin-top: 10px; line-height: 1.5;" id="rolNote">—</div>
+  </div>
+
+  <!-- PIANIFICATORE -->
+  <div class="card">
+    <h3 style="margin-bottom: 10px;">Pianifica un periodo</h3>
+    <div class="tiny muted" style="margin-bottom: 12px;">Simula quanti giorni ti resteranno dopo un periodo di ferie</div>
+    <div class="field-row">
+      <div class="field">
+        <label>Da</label>
+        <input type="date" id="planFrom">
+      </div>
+      <div class="field">
+        <label>A</label>
+        <input type="date" id="planTo">
+      </div>
+    </div>
+    <div id="planResult" style="display:none;" class="card flat" style="background: var(--bg-soft); border: 0; padding: 14px; margin-top: 4px;">
+      <div class="kv"><span class="k">Giorni consumati (CCNL)</span><span class="v mono" id="planConsumati">0</span></div>
+      <div class="kv"><span class="k">Disponibili oggi</span><span class="v mono" id="planDisponibili">0</span></div>
+      <div class="kv" style="border-bottom: 0; padding-top: 10px;"><span class="k" style="font-weight: 600;">Resterebbero</span><span class="v mono" id="planResta" style="font-size: 1.1rem; font-weight: 700; color: var(--accent);">0</span></div>
+      <div class="tiny" style="margin-top: 8px;" id="planMsg"></div>
+    </div>
+  </div>
+
+  <!-- STORICO FERIE GODUTE -->
+  <div class="card">
+    <h3 style="margin-bottom: 10px;">Storico</h3>
+    <div id="ferieHistory"></div>
+  </div>
+
+  <!-- INFO/REGOLE -->
+  <div class="card flat" style="background: var(--bg-soft); border: 0;">
+    <div class="label" style="margin-bottom: 6px;">Riferimenti</div>
+    <p class="small" style="line-height: 1.6;">CCNL Commercio Confcommercio, art. 147: <strong>26 giorni di ferie annui</strong>, settimana convenzionale di 6 giorni (lun-sab). Maturazione: 2,17 giorni/mese se hai lavorato almeno 15 giorni nel mese. Termine di godimento: 18 mesi dalla fine dell'anno di maturazione. Permessi ROL: <strong>56 ore/anno per aziende fino a 15 dipendenti</strong> (72h oltre), riproporzionati al part-time.</p>
+  </div>
+</section>
+
+<!-- CONTRATTO -->
+<section class="section" id="sec-contratto">
+  <div class="section-head">
+    <h2>Contratto</h2>
+    <div class="muted small">Configura i dati del tuo rapporto di lavoro</div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom: 14px;">Inquadramento</h3>
+
+    <div class="field">
+      <label>CCNL applicato</label>
+      <input type="text" id="cfg-ccnl" value="Commercio Confcommercio">
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Livello attuale</label>
+        <select id="cfg-livello">
+          <option value="7">7° livello</option>
+          <option value="6">6° livello</option>
+          <option value="5">5° livello</option>
+          <option value="4">4° livello</option>
+          <option value="3">3° livello</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Ore settimana</label>
+        <input type="number" id="cfg-orePT" value="25" min="0" max="40" step="0.5">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Lordo mensile (€)</label>
+        <input type="number" id="cfg-lordo" value="870.50" step="0.01">
+      </div>
+      <div class="field">
+        <label>Paga oraria (€)</label>
+        <input type="number" id="cfg-orario" value="8.29" step="0.01">
+      </div>
+    </div>
+
+    <div class="field-row">
+      <div class="field">
+        <label>Mensilità</label>
+        <input type="number" id="cfg-mensilita" value="14" min="12" max="16">
+      </div>
+      <div class="field">
+        <label>Inizio rapporto</label>
+        <input type="date" id="cfg-inizio" value="2026-05-05">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom: 14px;">Maggiorazioni (%)</h3>
+    <div class="field-row">
+      <div class="field">
+        <label>Ore supplementari</label>
+        <input type="number" id="cfg-suppl" value="15" step="1">
+      </div>
+      <div class="field">
+        <label>Straordinario</label>
+        <input type="number" id="cfg-stra" value="20" step="1">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Domenica/festivo</label>
+        <input type="number" id="cfg-dom" value="30" step="1">
+      </div>
+      <div class="field">
+        <label>Notturno (22-06)</label>
+        <input type="number" id="cfg-nott" value="50" step="1">
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom: 14px;">Fiscalità</h3>
+    <div class="field-row">
+      <div class="field">
+        <label>INPS apprendista</label>
+        <input type="number" id="cfg-inps" value="5.84" step="0.01">
+      </div>
+      <div class="field">
+        <label>Aliquota IRPEF</label>
+        <input type="number" id="cfg-irpef" value="23" step="1">
+      </div>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Tratt. integrativo (€/mese)</label>
+        <input type="number" id="cfg-bonus" value="100" step="1">
+      </div>
+      <div class="field">
+        <label>Addizionali (€/mese)</label>
+        <input type="number" id="cfg-addiz" value="25" step="1">
+      </div>
+    </div>
+  </div>
+
+  <div class="btn-row">
+    <button class="btn primary" id="btnSaveCfg">Salva</button>
+    <button class="btn ghost" id="btnResetCfg">Reset</button>
+  </div>
+
+  <div class="divider"></div>
+
+  <div class="card flat" style="background: var(--bg-soft); border: 0;">
+    <h3 style="margin-bottom: 8px;">Note sul calcolo</h3>
+    <p class="small" style="line-height: 1.6;">Le stime sono indicative. Il netto è calcolato applicando INPS, IRPEF al netto delle detrazioni standard (~€163/mese) e il trattamento integrativo. Addizionali regionali e comunali sono trattenute solo sulle mensilità ordinarie. Tredicesima e quattordicesima sono tassate senza bonus e detrazioni.</p>
+  </div>
+
+  <div class="btn-row" style="margin-top: 14px;">
+    <button class="btn danger ghost sm" id="btnWipe">Cancella tutti i dati</button>
+  </div>
+</section>
+
+</main>
+
+<nav class="tabs">
+  <button data-tab="dashboard" class="active"><span class="ico">⌂</span>Sintesi</button>
+  <button data-tab="turni"><span class="ico">⌚</span>Turni</button>
+  <button data-tab="ferie"><span class="ico">☀</span>Ferie</button>
+  <button data-tab="busta"><span class="ico">€</span>Cedolino</button>
+  <button data-tab="contratto"><span class="ico">§</span>Contratto</button>
+</nav>
+
+<!-- MODAL: modifica giorno -->
+<div class="modal-bg" id="modalShift">
+  <div class="modal">
+    <h2 id="modalDayTitle">Modifica giorno</h2>
+    <div class="muted small" id="modalDaySub" style="margin-bottom: 16px;">—</div>
+
+    <div class="field">
+      <label>Stato del giorno</label>
+      <div class="status-grid">
+        <button class="status-btn" data-status="lavoro">💼 Lavoro</button>
+        <button class="status-btn" data-status="riposo">🌙 Riposo</button>
+        <button class="status-btn" data-status="malattia">🤒 Malattia</button>
+        <button class="status-btn" data-status="ferie">🏖️ Ferie</button>
+        <button class="status-btn" data-status="permesso">⏸ Permesso</button>
+        <button class="status-btn" data-status="festivo">⛔ Festivo</button>
+      </div>
+    </div>
+
+    <div id="modalTimeFields">
+      <div class="field">
+        <label>Turno rapido</label>
+        <select id="m-preset">
+          <option value="">— Imposta manualmente —</option>
+          <option value="08:30|13:30">Mattino · 8:30 → 13:30 (5h)</option>
+          <option value="13:30|17:30">Pomeriggio · 13:30 → 17:30 (4h)</option>
+          <option value="08:30|13:30|sab">Sabato · 8:30 → 13:30 (5h)</option>
+          <option value="09:00|13:00">Mezza mattina · 9:00 → 13:00 (4h)</option>
+          <option value="14:00|18:00">Pomeriggio · 14:00 → 18:00 (4h)</option>
+          <option value="08:30|12:30">Mattina ridotta · 8:30 → 12:30 (4h)</option>
+        </select>
+        <div class="tiny muted" style="margin-top: 4px;">Scegli un preset o inserisci manualmente sotto</div>
+      </div>
+      <div class="field-row">
+        <div class="field">
+          <label>Inizio</label>
+          <input type="time" id="m-start" value="08:30">
+        </div>
+        <div class="field">
+          <label>Fine</label>
+          <input type="time" id="m-end" value="13:30">
+        </div>
+      </div>
+      <div class="field" style="background: var(--bg-soft); padding: 10px 12px; border-radius: 8px; margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span class="label" style="margin: 0;">Durata calcolata</span>
+          <span class="mono" style="font-weight: 600; font-size: 1rem;" id="m-duration">5,00 h</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Note (facoltativo)</label>
+        <input type="text" id="m-note" placeholder="es. turno extra, copertura collega">
+      </div>
+    </div>
+
+    <div class="btn-row">
+      <button class="btn primary" id="btnSaveShift">Salva</button>
+      <button class="btn ghost" id="btnCloseModal">Annulla</button>
+    </div>
+  </div>
+</div>
+
+<!-- OCR library -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
+
+<script>
+// ============================================================
+// STATE & STORAGE
+// ============================================================
+const STORE = {
+  cfg: 'cedolino.cfg',
+  shifts: 'cedolino.shifts',
+  active: 'cedolino.active',
+  buste: 'cedolino.buste'
+};
+
+const DEFAULT_CFG = {
+  ccnl: 'Commercio Confcommercio',
+  livello: 7,
+  orePT: 25,
+  lordo: 870.50,
+  orario: 8.29,
+  mensilita: 14,
+  inizio: '2026-05-05',
+  suppl: 15, stra: 20, dom: 30, nott: 50,
+  inps: 5.84, irpef: 23,
+  bonus: 100, addiz: 25
+};
+
+let cfg = loadCfg();
+let shifts = load(STORE.shifts, []);
+let active = load(STORE.active, null);
+let buste = load(STORE.buste, []);
+let currentOcr = null;
+
+// Migrazione: vecchio formato turni {id, start: ISO, end: ISO, note} → nuovo {dateKey, status, start: HH:MM, end: HH:MM}
+(function migrateOldShifts() {
+  let needsMigration = false;
+  shifts = shifts.map(s => {
+    if (s.start && typeof s.start === 'string' && s.start.includes('T')) {
+      needsMigration = true;
+      const startDate = new Date(s.start);
+      const endDate = new Date(s.end);
+      const pad = n => String(n).padStart(2, '0');
+      return {
+        id: s.id || Date.now() + Math.random(),
+        dateKey: startDate.getFullYear() + '-' + pad(startDate.getMonth() + 1) + '-' + pad(startDate.getDate()),
+        status: 'lavoro',
+        start: pad(startDate.getHours()) + ':' + pad(startDate.getMinutes()),
+        end: pad(endDate.getHours()) + ':' + pad(endDate.getMinutes()),
+        note: s.note || ''
+      };
+    }
+    return s;
+  });
+  if (needsMigration) {
+    save(STORE.shifts, shifts);
+    console.log('[Cedolino] Migrazione turni dal vecchio formato completata');
+  }
+  // Rimuovi turno "attivo" del vecchio timer se presente
+  if (active) {
+    localStorage.removeItem(STORE.active);
+    active = null;
+  }
+})();
+
+function load(key, fallback) {
+  try { return JSON.parse(localStorage.getItem(key)) ?? fallback; }
+  catch(e) { return fallback; }
+}
+function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
+function loadCfg() {
+  const c = load(STORE.cfg, null);
+  return c ? {...DEFAULT_CFG, ...c} : {...DEFAULT_CFG};
+}
+
+// ============================================================
+// FORMATTERS
+// ============================================================
+const fmt = {
+  eur(n) {
+    if (isNaN(n) || n === null) return '€ 0,00';
+    return '€ ' + n.toFixed(2).replace('.', ',').replace(/\B(?=(\d{3})+(?!\d))/g, '.');
+  },
+  eurBig(n) {
+    if (isNaN(n) || n === null) return '€ 0<span class="cents">,00</span>';
+    const [int, dec] = n.toFixed(2).split('.');
+    return '€ ' + int.replace(/\B(?=(\d{3})+(?!\d))/g, '.') + '<span class="cents">,' + dec + '</span>';
+  },
+  hours(h) {
+    if (isNaN(h)) return '0,00 h';
+    return h.toFixed(2).replace('.', ',') + ' h';
+  },
+  date(d) {
+    const date = new Date(d);
+    return date.toLocaleDateString('it-IT', {day: '2-digit', month: 'short'});
+  },
+  dateLong(d) {
+    return new Date(d).toLocaleDateString('it-IT', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
+  },
+  time(d) {
+    return new Date(d).toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'});
+  },
+  duration(ms) {
+    const total = Math.floor(ms / 1000);
+    const h = Math.floor(total / 3600);
+    const m = Math.floor((total % 3600) / 60);
+    const s = total % 60;
+    return `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+  }
+};
+
+// ============================================================
+// TABS
+// ============================================================
+document.querySelectorAll('nav.tabs button').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('sec-' + btn.dataset.tab).classList.add('active');
+    if (btn.dataset.tab === 'dashboard') renderDashboard();
+    if (btn.dataset.tab === 'turni') renderWeek();
+    if (btn.dataset.tab === 'busta') renderBuste();
+    if (btn.dataset.tab === 'ferie') renderFerie();
+    window.scrollTo(0, 0);
+  });
+});
+
+// ============================================================
+// HOURS CALCULATION
+// ============================================================
+
+// shiftHours è definito più avanti nella sezione WEEK VIEW
+
+function calcMonth(year, month) {
+  // month 0-indexed
+  // Filtra i turni del mese in base al dateKey YYYY-MM-DD
+  const yyyymm = year + '-' + String(month + 1).padStart(2, '0');
+  const monthShifts = shifts.filter(s => s.dateKey && s.dateKey.startsWith(yyyymm));
+
+  let totale = 0;
+  let ordinarie = 0, supplementari = 0, straordinarie = 0;
+
+  // Aggrega ore per settimana (lunedì) per classificare ord/supp/straord
+  const weekHours = {};
+  monthShifts.forEach(sh => {
+    const h = shiftHours(sh);
+    if (h === 0) return;
+    totale += h;
+    const d = new Date(sh.dateKey + 'T00:00:00');
+    const dow = d.getDay(); // 0=dom..6=sab
+    const diff = dow === 0 ? -6 : 1 - dow;
+    const weekStart = new Date(d);
+    weekStart.setDate(d.getDate() + diff);
+    const wk = dateKey(weekStart);
+    weekHours[wk] = (weekHours[wk] || 0) + h;
+  });
+
+  // Per ogni settimana, classifica ore (PT 25h, FT 40h)
+  Object.values(weekHours).forEach(wkH => {
+    if (wkH <= cfg.orePT) {
+      ordinarie += wkH;
+    } else if (wkH <= 40) {
+      ordinarie += cfg.orePT;
+      supplementari += (wkH - cfg.orePT);
+    } else {
+      ordinarie += cfg.orePT;
+      supplementari += (40 - cfg.orePT);
+      straordinarie += (wkH - 40);
+    }
+  });
+
+  // Stima lordo del mese
+  const paga = cfg.orario;
+  const lordoOrd = ordinarie * paga;
+  const lordoSup = supplementari * paga * (1 + cfg.suppl/100);
+  const lordoStr = straordinarie * paga * (1 + cfg.stra/100);
+  const lordoCalcolato = lordoOrd + lordoSup + lordoStr;
+
+  // Se non ci sono turni registrati, usa la base contrattuale come stima
+  const lordoBase = (totale === 0) ? cfg.lordo : lordoCalcolato;
+
+  // Conta giorni per stato (informativi)
+  const giorniLavoro = monthShifts.filter(s => s.status === 'lavoro' && shiftHours(s) > 0).length;
+  const giorniMalattia = monthShifts.filter(s => s.status === 'malattia').length;
+  const giorniFerie = monthShifts.filter(s => s.status === 'ferie').length;
+  const giorniPermesso = monthShifts.filter(s => s.status === 'permesso').length;
+
+  // Stima netto con formule fiscali corrette
+  // Calcolo annualizzato per rispettare le scale IRPEF
+  const lordoAnnuo = lordoBase * cfg.mensilita; // include 13ma e 14ma se previste
+  const inpsAnnuo = lordoAnnuo * cfg.inps / 100;
+  const imponibileIrpefAnnuo = lordoAnnuo - inpsAnnuo;
+
+  // IRPEF a scaglioni 2026 (riforma 2024 a 3 scaglioni)
+  // 23% fino a 28.000, 35% fino a 50.000, 43% oltre
+  let irpefLordaAnnua = 0;
+  if (imponibileIrpefAnnuo <= 28000) {
+    irpefLordaAnnua = imponibileIrpefAnnuo * 0.23;
+  } else if (imponibileIrpefAnnuo <= 50000) {
+    irpefLordaAnnua = 28000 * 0.23 + (imponibileIrpefAnnuo - 28000) * 0.35;
+  } else {
+    irpefLordaAnnua = 28000 * 0.23 + 22000 * 0.35 + (imponibileIrpefAnnuo - 50000) * 0.43;
+  }
+
+  // Detrazione lavoro dipendente (formula TUIR aggiornata 2024+)
+  // - fino a 8.500: detrazione fissa 1.955
+  // - 8.500 – 28.000: 1.910 + 1.190 × (28.000 − reddito) / 19.500
+  // - 28.000 – 50.000: 1.910 × (50.000 − reddito) / 22.000
+  // - oltre 50.000: 0
+  let detrazioneAnnua = 0;
+  if (imponibileIrpefAnnuo <= 8500) {
+    detrazioneAnnua = 1955;
+  } else if (imponibileIrpefAnnuo <= 28000) {
+    detrazioneAnnua = 1910 + 1190 * (28000 - imponibileIrpefAnnuo) / 19500;
+  } else if (imponibileIrpefAnnuo <= 50000) {
+    detrazioneAnnua = 1910 * (50000 - imponibileIrpefAnnuo) / 22000;
+  }
+
+  const irpefNettaAnnua = Math.max(0, irpefLordaAnnua - detrazioneAnnua);
+
+  // Trattamento integrativo (ex Bonus Renzi) — richiede capienza fiscale
+  // Per RAL <= 15.000: spetta se IRPEF lorda > (detrazione lavoro dip. − 75€)
+  let trattAnnuo = 0;
+  const detrazioneRidotta = detrazioneAnnua - 75;
+  if (imponibileIrpefAnnuo <= 15000 && irpefLordaAnnua > detrazioneRidotta) {
+    trattAnnuo = 1200;
+  }
+
+  // Somma integrativa L. 207/2024 (Legge di Bilancio 2025) — NON richiede capienza
+  // Si applica al reddito da lavoro dipendente, esente da tasse e contributi
+  // 7,1% fino a 8.500 | 5,3% tra 8.500 e 15.000 | 4,8% tra 15.000 e 20.000 | 0 oltre
+  let sommaIntegrativaAnnua = 0;
+  if (imponibileIrpefAnnuo <= 8500) {
+    sommaIntegrativaAnnua = imponibileIrpefAnnuo * 0.071;
+  } else if (imponibileIrpefAnnuo <= 15000) {
+    sommaIntegrativaAnnua = imponibileIrpefAnnuo * 0.053;
+  } else if (imponibileIrpefAnnuo <= 20000) {
+    sommaIntegrativaAnnua = imponibileIrpefAnnuo * 0.048;
+  }
+
+  // Ricava i valori mensili (riproporzionati sulle mensilità contrattuali)
+  const inps = inpsAnnuo / cfg.mensilita;
+  const irpefNetta = irpefNettaAnnua / cfg.mensilita;
+  const tratt = trattAnnuo / 12; // trattamento integrativo solo sulle 12 ordinarie
+  const sommaIntegrativa = sommaIntegrativaAnnua / 12; // anche questa solo sulle 12 ordinarie
+
+  // Per la composizione mensile mostrata in dashboard, usa solo le 12 mensilità ordinarie
+  // (13ma e 14ma vengono tassate separatamente, senza trattamento integrativo né addizionali)
+  const netto = lordoBase - inps - irpefNetta + tratt + sommaIntegrativa - cfg.addiz;
+
+  return {
+    totale, ordinarie, supplementari, straordinarie,
+    domenicali: 0, notturne: 0,
+    lordoOrd, lordoSup, lordoStr, lordoDom: 0, lordoNot: 0, lordoTot: lordoBase,
+    inps, irpefNetta, tratt, sommaIntegrativa, addiz: cfg.addiz, netto,
+    nShifts: giorniLavoro,
+    giorniLavoro, giorniMalattia, giorniFerie, giorniPermesso
+  };
+}
+
+// ============================================================
+// DASHBOARD RENDERING
+// ============================================================
+function renderDashboard() {
+  const now = new Date();
+  document.getElementById('todayDate').textContent = now.toLocaleDateString('it-IT', {day: '2-digit', month: 'short'}).toUpperCase();
+
+  const monthName = now.toLocaleDateString('it-IT', {month: 'long', year: 'numeric'});
+  document.getElementById('monthTitle').textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
+
+  const m = calcMonth(now.getFullYear(), now.getMonth());
+  document.getElementById('monthRange').textContent = `${m.giorniLavoro} giorn${m.giorniLavoro===1?'o':'i'} di lavoro • ${fmt.hours(m.totale)}`;
+
+  document.getElementById('estLordo').innerHTML = fmt.eurBig(m.lordoTot);
+  document.getElementById('estNetto').textContent = fmt.eur(m.netto);
+  document.getElementById('estOre').textContent = fmt.hours(m.totale);
+  document.getElementById('oreOrd').textContent = fmt.hours(m.ordinarie);
+  document.getElementById('oreOrdTarget').textContent = `su ${(cfg.orePT * 4.33) | 0}/mese`;
+  document.getElementById('oreMagg').textContent = fmt.hours(m.supplementari + m.straordinarie);
+  document.getElementById('livelloChip').textContent = cfg.livello + '° livello';
+
+  // Composizione
+  const comp = document.getElementById('composizione');
+  const rows = [];
+  rows.push(['Retribuzione base', cfg.lordo]);
+  if (m.supplementari > 0) rows.push([`Supplementari (${m.supplementari.toFixed(1)}h × +${cfg.suppl}%)`, m.lordoSup - (m.supplementari * cfg.orario)]);
+  if (m.straordinarie > 0) rows.push([`Straordinario (${m.straordinarie.toFixed(1)}h × +${cfg.stra}%)`, m.lordoStr]);
+  rows.push(['— INPS ' + cfg.inps + '%', -m.inps]);
+  rows.push(['— IRPEF (netto detrazioni)', -m.irpefNetta]);
+  if (m.tratt > 0) rows.push(['+ Trattamento integrativo', m.tratt]);
+  if (m.sommaIntegrativa > 0) rows.push(['+ Somma integrativa L.207/2024', m.sommaIntegrativa]);
+  rows.push(['— Addizionali', -m.addiz]);
+
+  comp.innerHTML = rows.map(([k, v]) => `
+    <div class="kv">
+      <span class="k">${k}</span>
+      <span class="v" style="${v < 0 ? 'color: var(--ink-soft);' : ''}">${fmt.eur(v)}</span>
+    </div>`).join('') + `
+    <div class="kv" style="border-top: 2px solid var(--ink); border-bottom: 0; padding-top: 12px; margin-top: 6px;">
+      <span class="k" style="font-weight: 600; color: var(--ink);">Netto in busta</span>
+      <span class="v" style="font-size: 1.1rem; font-weight: 700; color: var(--accent);">${fmt.eur(m.netto)}</span>
+    </div>`;
+
+  // Promemoria
+  let prom = '';
+  const extras = [];
+  if (m.giorniMalattia > 0) extras.push(`${m.giorniMalattia} giorn${m.giorniMalattia===1?'o':'i'} di malattia`);
+  if (m.giorniFerie > 0) extras.push(`${m.giorniFerie} giorn${m.giorniFerie===1?'o':'i'} di ferie`);
+  if (m.giorniPermesso > 0) extras.push(`${m.giorniPermesso} giorn${m.giorniPermesso===1?'o':'i'} di permesso`);
+
+  if (m.nShifts === 0 && extras.length === 0) {
+    prom = 'Nessun turno registrato questo mese. La stima usa la retribuzione base contrattuale. Inizia a pianificare i turni dalla sezione "Turni della settimana".';
+  } else if (m.supplementari > 0 || m.straordinarie > 0) {
+    prom = 'Questo mese hai ore oltre il contratto. Verifica con cura il cedolino — devono comparire voci specifiche per supplementari/straordinari.';
+    if (extras.length > 0) prom += ' Inoltre: ' + extras.join(', ') + '.';
+  } else {
+    prom = 'Tutto regolare. A fine mese carica la busta paga nella sezione "Cedolino" per il confronto.';
+    if (extras.length > 0) prom += ' Da segnalare: ' + extras.join(', ') + '.';
+  }
+  document.getElementById('promemoria').textContent = prom;
+}
+
+// ============================================================
+// WEEK VIEW / SHIFTS
+// ============================================================
+const DAY_NAMES_SHORT = ['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
+const DAY_NAMES_FULL = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+
+// Determina su quale settimana posizionarsi all'apertura:
+// - se ci sono turni: la settimana più recente con turni
+// - altrimenti: la settimana di inizio contratto se non è troppo lontana nel passato (entro 6 mesi)
+// - altrimenti: la settimana corrente
+function getInitialWeekStart() {
+  const today = new Date();
+  const todayWeek = getWeekStart(today);
+
+  // C'è qualche turno registrato? Vai alla settimana più recente con turni (fino a oggi)
+  if (shifts.length > 0) {
+    const datesWithShifts = shifts
+      .map(s => s.dateKey)
+      .filter(Boolean)
+      .sort();
+    const lastDate = datesWithShifts[datesWithShifts.length - 1];
+    if (lastDate) {
+      const lastWeek = getWeekStart(new Date(lastDate + 'T12:00:00'));
+      // Se la settimana più recente con turni è nel passato ma comunque vicina, mostra quella
+      // altrimenti la corrente
+      if (lastWeek.getTime() <= todayWeek.getTime()) {
+        return todayWeek; // se ci sono turni passati, parti comunque dalla corrente
+      }
+    }
+  }
+
+  // Se la data di inizio contratto è nel passato recente e nessun turno registrato,
+  // posizionati sulla settimana di inizio per facilitare il primo inserimento
+  if (cfg.inizio) {
+    const inizio = new Date(cfg.inizio + 'T12:00:00');
+    const inizioWeek = getWeekStart(inizio);
+    const monthsDiff = (today - inizio) / (1000 * 60 * 60 * 24 * 30);
+    if (monthsDiff >= 0 && monthsDiff < 1 && shifts.length === 0) {
+      return inizioWeek;
+    }
+  }
+
+  return todayWeek;
+}
+
+let currentWeekStart = getInitialWeekStart();
+let editingDate = null; // YYYY-MM-DD del giorno aperto nel modal
+let editingStatus = 'lavoro';
+
+// Restituisce il lunedì della settimana di una data
+function getWeekStart(d) {
+  const date = new Date(d);
+  date.setHours(0, 0, 0, 0);
+  const day = date.getDay(); // 0=dom, 1=lun, ..., 6=sab
+  const diff = day === 0 ? -6 : 1 - day; // riporta a lunedì
+  date.setDate(date.getDate() + diff);
+  return date;
+}
+
+function dateKey(d) {
+  const date = new Date(d);
+  return date.getFullYear() + '-' + String(date.getMonth() + 1).padStart(2, '0') + '-' + String(date.getDate()).padStart(2, '0');
+}
+
+function getShiftForDate(dateK) {
+  return shifts.find(s => s.dateKey === dateK);
+}
+
+// Restituisce ore di un turno (0 se non lavoro o senza orario)
+function shiftHours(s) {
+  if (!s || s.status !== 'lavoro' || !s.start || !s.end) return 0;
+  const [sh, sm] = s.start.split(':').map(Number);
+  const [eh, em] = s.end.split(':').map(Number);
+  const minutes = (eh * 60 + em) - (sh * 60 + sm);
+  return Math.max(0, minutes / 60);
+}
+
+// Renderizza la settimana corrente (lun-sab)
+function renderWeek() {
+  // Calcola le 6 date della settimana (lun-sab)
+  const days = [];
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(currentWeekStart);
+    d.setDate(d.getDate() + i);
+    days.push(d);
+  }
+  const lastDay = days[5];
+
+  // Label settimana
+  const fmtD = d => d.toLocaleDateString('it-IT', {day: 'numeric', month: 'short'});
+  let label = isCurrentWeek() ? 'Settimana corrente' : (isPastWeek() ? 'Settimana passata' : 'Settimana futura');
+  // Se questa settimana contiene la data di inizio contratto, evidenziala
+  if (cfg.inizio) {
+    const inizio = new Date(cfg.inizio + 'T12:00:00');
+    if (inizio >= days[0] && inizio <= new Date(days[5].getTime() + 86400000)) {
+      label = '⚑ Settimana di inizio contratto';
+    }
+  }
+  document.getElementById('weekLabel').textContent = label;
+  document.getElementById('weekRange').textContent = `${fmtD(days[0])} → ${fmtD(lastDay)}`;
+
+  // Calcola ore totali settimana e info sabato
+  let totalHours = 0;
+  let workedDays = 0;
+  let hasSabato = false;
+  days.forEach(d => {
+    const sh = getShiftForDate(dateKey(d));
+    if (sh && sh.status === 'lavoro') {
+      totalHours += shiftHours(sh);
+      workedDays++;
+      if (d.getDay() === 6) hasSabato = true;
+    }
+  });
+
+  // Aggiorna sommario settimana
+  document.getElementById('weekHours').textContent = fmt.hours(totalHours);
+  document.getElementById('weekTarget').textContent = fmt.hours(cfg.orePT);
+  const delta = totalHours - cfg.orePT;
+  const deltaEl = document.getElementById('weekDelta');
+  if (Math.abs(delta) < 0.05) {
+    deltaEl.textContent = '✓ giusto';
+    deltaEl.style.color = 'var(--good)';
+  } else if (delta < 0) {
+    deltaEl.textContent = `${delta.toFixed(2).replace('.', ',')} h`;
+    deltaEl.style.color = 'var(--warn)';
+  } else {
+    deltaEl.textContent = `+${delta.toFixed(2).replace('.', ',')} h`;
+    deltaEl.style.color = 'var(--bad)';
+  }
+
+  // Progress bar
+  const pct = Math.min(100, (totalHours / cfg.orePT) * 100);
+  const bar = document.getElementById('weekProgressBar');
+  bar.style.width = pct + '%';
+  bar.classList.remove('complete', 'over');
+  if (Math.abs(delta) < 0.05) bar.classList.add('complete');
+  else if (delta > 0) bar.classList.add('over');
+
+  // Info contestuale (sabato lavorato?)
+  const sabatoStatus = checkSabatoPattern();
+  document.getElementById('weekInfo').textContent = sabatoStatus;
+
+  // Renderizza i 6 giorni
+  const container = document.getElementById('weekDays');
+  const todayKey = dateKey(new Date());
+  const inizioContratto = cfg.inizio ? cfg.inizio : null;
+  container.innerHTML = days.map(d => {
+    const k = dateKey(d);
+    const sh = getShiftForDate(k);
+    const isToday = k === todayKey;
+    const isPreContratto = inizioContratto && k < inizioContratto;
+    const status = sh ? sh.status : null;
+    const statusClass = status ? `status-${status}` : '';
+    const todayClass = isToday ? 'today' : '';
+    const preClass = isPreContratto ? 'pre-contratto' : '';
+
+    let infoHtml = '<div class="empty-day">Tocca per pianificare</div>';
+    let hoursHtml = '<span class="muted small">—</span>';
+
+    if (isPreContratto && !sh) {
+      infoHtml = '<div class="empty-day" style="color: var(--ink-soft); font-style: italic;">Prima dell\'inizio contratto</div>';
+    } else if (sh) {
+      if (sh.status === 'lavoro') {
+        const h = shiftHours(sh);
+        infoHtml = `<div class="time">${sh.start} → ${sh.end}</div>`;
+        if (sh.note) infoHtml += `<div class="meta">${sh.note}</div>`;
+        hoursHtml = `${h.toFixed(2).replace('.', ',')}h<span class="sub">${fmt.eur(h * cfg.orario)}</span>`;
+      } else {
+        const labels = {
+          riposo: 'Riposo',
+          malattia: 'Malattia',
+          ferie: 'Ferie',
+          permesso: 'Permesso',
+          festivo: 'Festivo'
+        };
+        infoHtml = `<span class="status-badge">${labels[sh.status]}</span>`;
+        if (sh.note) infoHtml += `<div class="meta" style="margin-top:4px;">${sh.note}</div>`;
+        hoursHtml = `<span class="muted small">—</span>`;
+      }
+    } else if (d.getDay() === 6 && !isPreContratto) {
+      // Sabato vuoto → suggerimento (solo se non è pre-contratto)
+      infoHtml = '<div class="empty-day">Sabato — tocca per impostare</div>';
+    }
+
+    return `
+      <div class="day-row ${statusClass} ${todayClass} ${preClass}" data-date="${k}">
+        <div class="day-marker">
+          <div class="dname">${DAY_NAMES_SHORT[d.getDay()]}</div>
+          <div class="dnum">${d.getDate()}</div>
+        </div>
+        <div class="day-info">${infoHtml}</div>
+        <div class="day-hours">${hoursHtml}</div>
+      </div>`;
+  }).join('');
+
+  // Click handler su ogni giorno
+  container.querySelectorAll('.day-row').forEach(el => {
+    el.addEventListener('click', () => openDayEditor(el.dataset.date));
+  });
+}
+
+function isCurrentWeek() {
+  return getWeekStart(new Date()).getTime() === currentWeekStart.getTime();
+}
+function isPastWeek() {
+  return currentWeekStart.getTime() < getWeekStart(new Date()).getTime();
+}
+
+// Verifica pattern sabato alternato nel mese e dà un suggerimento per il sabato della settimana
+function checkSabatoPattern() {
+  const month = currentWeekStart.getMonth();
+  const year = currentWeekStart.getFullYear();
+  let sabati = [];
+  for (let d = 1; d <= 31; d++) {
+    const date = new Date(year, month, d);
+    if (date.getMonth() !== month) break;
+    if (date.getDay() === 6) sabati.push(date);
+  }
+  let lavoratiAltro = 0; // sabati lavorati nel mese DIVERSI da quello della settimana corrente
+  let sabatoQuestaSettimana = null;
+  let statoSabato = null;
+  sabati.forEach(s => {
+    const sk = dateKey(s);
+    const sh = getShiftForDate(sk);
+    // È il sabato di QUESTA settimana?
+    const weekOfSab = getWeekStart(s);
+    if (weekOfSab.getTime() === currentWeekStart.getTime()) {
+      sabatoQuestaSettimana = s;
+      statoSabato = sh ? sh.status : null;
+    } else if (sh && sh.status === 'lavoro') {
+      lavoratiAltro++;
+    }
+  });
+
+  let msg = '';
+  if (sabati.length > 0) {
+    const lavoratiTotali = lavoratiAltro + (statoSabato === 'lavoro' ? 1 : 0);
+    msg = `Sabati lavorati questo mese: ${lavoratiTotali}/${sabati.length} (target: 2). `;
+    // Suggerimento per il sabato della settimana corrente
+    if (sabatoQuestaSettimana && statoSabato === null) {
+      if (lavoratiAltro >= 2) {
+        msg += '✓ Sabato a riposo (hai già fatto 2 sabati questo mese).';
+      } else if (sabati.length - sabati.indexOf(sabatoQuestaSettimana) + lavoratiAltro <= 2) {
+        msg += '⚠ Suggerimento: lavora questo sabato per raggiungere il target di 2/mese.';
+      } else {
+        msg += 'Sabato non ancora pianificato.';
+      }
+    }
+  }
+  return msg;
+}
+
+// Naviga settimane
+document.getElementById('btnPrevWeek').addEventListener('click', () => {
+  currentWeekStart.setDate(currentWeekStart.getDate() - 7);
+  currentWeekStart = new Date(currentWeekStart);
+  renderWeek();
+  renderMonthSummary();
+});
+document.getElementById('btnNextWeek').addEventListener('click', () => {
+  currentWeekStart.setDate(currentWeekStart.getDate() + 7);
+  currentWeekStart = new Date(currentWeekStart);
+  renderWeek();
+  renderMonthSummary();
+});
+document.getElementById('btnGoToday').addEventListener('click', () => {
+  currentWeekStart = getWeekStart(new Date());
+  renderWeek();
+  renderMonthSummary();
+});
+document.getElementById('btnGoStart').addEventListener('click', () => {
+  if (!cfg.inizio) {
+    alert('Data di inizio contratto non impostata. Vai in Contratto per configurarla.');
+    return;
+  }
+  const inizio = new Date(cfg.inizio + 'T12:00:00');
+  currentWeekStart = getWeekStart(inizio);
+  renderWeek();
+  renderMonthSummary();
+});
+
+// Apri editor giorno
+function openDayEditor(dateK) {
+  editingDate = dateK;
+  const d = new Date(dateK + 'T12:00:00'); // mezzogiorno per evitare problemi timezone
+  const sh = getShiftForDate(dateK);
+
+  document.getElementById('modalDayTitle').textContent = DAY_NAMES_FULL[d.getDay()];
+
+  let subText = d.toLocaleDateString('it-IT', {day: 'numeric', month: 'long', year: 'numeric'});
+  // Avviso se prima dell'inizio contratto
+  if (cfg.inizio && dateK < cfg.inizio) {
+    subText += ' • ⚠ Prima dell\'inizio contratto';
+  } else if (cfg.inizio && dateK === cfg.inizio) {
+    subText += ' • 🎉 Primo giorno di lavoro';
+  }
+  document.getElementById('modalDaySub').textContent = subText;
+
+  // Imposta stato
+  editingStatus = sh ? sh.status : 'lavoro';
+  document.querySelectorAll('.status-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.status === editingStatus);
+  });
+
+  // Imposta orari
+  if (sh && sh.start) document.getElementById('m-start').value = sh.start;
+  else document.getElementById('m-start').value = '08:30';
+  if (sh && sh.end) document.getElementById('m-end').value = sh.end;
+  else document.getElementById('m-end').value = '13:30';
+  document.getElementById('m-note').value = sh ? (sh.note || '') : '';
+
+  // Reset menu preset
+  const preset = document.getElementById('m-preset');
+  if (preset) preset.value = '';
+
+  // Aggiorna durata calcolata
+  updateDuration();
+
+  toggleTimeFields();
+  document.getElementById('modalShift').classList.add('show');
+}
+
+function toggleTimeFields() {
+  const show = editingStatus === 'lavoro';
+  document.getElementById('modalTimeFields').style.display = show ? 'block' : 'none';
+}
+
+// Selezione stato nel modal
+document.querySelectorAll('.status-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    editingStatus = btn.dataset.status;
+    document.querySelectorAll('.status-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    toggleTimeFields();
+  });
+});
+
+// Menu a tendina preset: applica gli orari quando selezionato
+document.getElementById('m-preset').addEventListener('change', (e) => {
+  const val = e.target.value;
+  if (!val) return; // "Imposta manualmente"
+  const [start, end] = val.split('|');
+  document.getElementById('m-start').value = start;
+  document.getElementById('m-end').value = end;
+  updateDuration();
+  // Reset menu per permettere riselezione
+  setTimeout(() => { e.target.value = ''; }, 100);
+});
+
+// Aggiorna durata calcolata quando cambia inizio/fine
+function updateDuration() {
+  const start = document.getElementById('m-start').value;
+  const end = document.getElementById('m-end').value;
+  const el = document.getElementById('m-duration');
+  if (!start || !end || !el) return;
+  const [sh, sm] = start.split(':').map(Number);
+  const [eh, em] = end.split(':').map(Number);
+  const minutes = (eh * 60 + em) - (sh * 60 + sm);
+  if (minutes <= 0) {
+    el.textContent = '⚠ fine ≤ inizio';
+    el.style.color = 'var(--bad)';
+  } else {
+    el.textContent = (minutes / 60).toFixed(2).replace('.', ',') + ' h';
+    el.style.color = 'var(--ink)';
+  }
+}
+document.getElementById('m-start').addEventListener('change', updateDuration);
+document.getElementById('m-end').addEventListener('change', updateDuration);
+document.getElementById('m-start').addEventListener('input', updateDuration);
+document.getElementById('m-end').addEventListener('input', updateDuration);
+
+// Salva giorno modificato
+document.getElementById('btnSaveShift').addEventListener('click', () => {
+  if (!editingDate) return;
+
+  // Rimuovi turno esistente per quella data
+  shifts = shifts.filter(s => s.dateKey !== editingDate);
+
+  const newShift = {
+    id: Date.now(),
+    dateKey: editingDate,
+    status: editingStatus,
+    note: document.getElementById('m-note').value.trim()
+  };
+
+  if (editingStatus === 'lavoro') {
+    const start = document.getElementById('m-start').value;
+    const end = document.getElementById('m-end').value;
+    if (!start || !end) { alert('Inserisci inizio e fine'); return; }
+    const [sh, sm] = start.split(':').map(Number);
+    const [eh, em] = end.split(':').map(Number);
+    if ((eh * 60 + em) <= (sh * 60 + sm)) { alert('L\'orario di fine deve essere dopo l\'inizio'); return; }
+    newShift.start = start;
+    newShift.end = end;
+  }
+
+  shifts.push(newShift);
+  save(STORE.shifts, shifts);
+  document.getElementById('modalShift').classList.remove('show');
+  editingDate = null;
+  renderWeek();
+  renderMonthSummary();
+  renderDashboard();
+});
+
+// Annulla
+document.getElementById('btnCloseModal').addEventListener('click', () => {
+  document.getElementById('modalShift').classList.remove('show');
+  editingDate = null;
+});
+
+document.getElementById('btnClearWeek').addEventListener('click', () => {
+  if (!confirm('Cancellare tutti i turni di questa settimana?')) return;
+  for (let i = 0; i < 6; i++) {
+    const d = new Date(currentWeekStart);
+    d.setDate(d.getDate() + i);
+    const k = dateKey(d);
+    shifts = shifts.filter(s => s.dateKey !== k);
+  }
+  save(STORE.shifts, shifts);
+  renderWeek();
+  renderMonthSummary();
+  renderDashboard();
+});
+
+// Copia da settimana precedente
+document.getElementById('btnCopyWeek').addEventListener('click', () => {
+  const prevWeekStart = new Date(currentWeekStart);
+  prevWeekStart.setDate(prevWeekStart.getDate() - 7);
+  let copied = 0;
+  for (let i = 0; i < 6; i++) {
+    const prevDate = new Date(prevWeekStart);
+    prevDate.setDate(prevDate.getDate() + i);
+    const currDate = new Date(currentWeekStart);
+    currDate.setDate(currDate.getDate() + i);
+    const prevSh = getShiftForDate(dateKey(prevDate));
+    if (prevSh) {
+      shifts = shifts.filter(s => s.dateKey !== dateKey(currDate));
+      shifts.push({
+        ...prevSh,
+        id: Date.now() + i,
+        dateKey: dateKey(currDate)
+      });
+      copied++;
+    }
+  }
+  if (copied === 0) {
+    alert('La settimana precedente è vuota, niente da copiare.');
+    return;
+  }
+  save(STORE.shifts, shifts);
+  renderWeek();
+  renderMonthSummary();
+  renderDashboard();
+});
+
+// Riepilogo mese (settimane del mese visualizzato)
+function renderMonthSummary() {
+  const month = currentWeekStart.getMonth();
+  const year = currentWeekStart.getFullYear();
+  const monthName = currentWeekStart.toLocaleDateString('it-IT', {month: 'long', year: 'numeric'});
+
+  // Trova tutte le settimane che hanno almeno un giorno nel mese
+  const firstOfMonth = new Date(year, month, 1);
+  const lastOfMonth = new Date(year, month + 1, 0);
+
+  const weeks = [];
+  let cursor = getWeekStart(firstOfMonth);
+  while (cursor <= lastOfMonth) {
+    weeks.push(new Date(cursor));
+    cursor.setDate(cursor.getDate() + 7);
+  }
+
+  let monthTotal = 0;
+  let monthSabati = 0;
+  let monthMalattia = 0;
+  let monthFerie = 0;
+
+  const rows = weeks.map((wStart, i) => {
+    let wHours = 0;
+    let wDays = 0;
+    let hasSabato = false;
+    for (let j = 0; j < 6; j++) {
+      const d = new Date(wStart);
+      d.setDate(d.getDate() + j);
+      if (d.getMonth() !== month) continue;
+      const sh = getShiftForDate(dateKey(d));
+      if (sh && sh.status === 'lavoro') {
+        wHours += shiftHours(sh);
+        wDays++;
+        if (d.getDay() === 6) { hasSabato = true; monthSabati++; }
+      } else if (sh && sh.status === 'malattia') monthMalattia++;
+      else if (sh && sh.status === 'ferie') monthFerie++;
+    }
+    monthTotal += wHours;
+
+    const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + 5);
+    const label = `Sett. ${i + 1}`;
+    const range = `${wStart.getDate()}–${wEnd.getDate()}`;
+    let chip = '';
+    if (wHours > 0) {
+      const delta = wHours - cfg.orePT;
+      if (Math.abs(delta) < 0.05) chip = '<span class="chip good">✓</span>';
+      else if (delta < 0) chip = `<span class="chip warn">−${Math.abs(delta).toFixed(1)}</span>`;
+      else chip = `<span class="chip bad">+${delta.toFixed(1)}</span>`;
+    }
+    if (hasSabato) chip += ' <span class="chip accent">SAB</span>';
+
+    return `
+      <div class="month-week-row">
+        <span class="wname">${label} <span class="muted">${range}</span></span>
+        <span class="whrs">${fmt.hours(wHours)}</span>
+        <span>${chip}</span>
+      </div>`;
+  }).join('');
+
+  let extraInfo = '';
+  if (monthMalattia > 0 || monthFerie > 0) {
+    extraInfo = '<div class="tiny muted" style="margin-top: 10px; line-height: 1.5;">';
+    if (monthMalattia > 0) extraInfo += `Malattia: ${monthMalattia} giorni. `;
+    if (monthFerie > 0) extraInfo += `Ferie: ${monthFerie} giorni.`;
+    extraInfo += '</div>';
+  }
+
+  const sabatiTarget = monthSabati === 2 ? '✓' : (monthSabati < 2 ? `mancano ${2-monthSabati}` : `${monthSabati-2} in più`);
+  const sabatiChip = monthSabati === 2 ? 'good' : (monthSabati < 2 ? 'warn' : 'bad');
+
+  document.getElementById('monthSummaryBody').innerHTML = `
+    <div style="margin-bottom: 12px;">
+      <div class="label">${monthName.charAt(0).toUpperCase() + monthName.slice(1)}</div>
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
+        <div class="mono" style="font-size: 1.4rem; font-weight: 600;">${fmt.hours(monthTotal)}</div>
+        <span class="chip ${sabatiChip}">Sabati: ${monthSabati}/2 ${sabatiTarget}</span>
+      </div>
+    </div>
+    ${rows}
+    ${extraInfo}
+  `;
+}
+
+// Export CSV (aggiornato per nuova struttura)
+document.getElementById('btnExport').addEventListener('click', () => {
+  if (shifts.length === 0) { alert('Nessun turno da esportare'); return; }
+  const rows = [['Data', 'Giorno', 'Stato', 'Inizio', 'Fine', 'Ore', 'Note']];
+  const sorted = [...shifts].sort((a,b) => a.dateKey.localeCompare(b.dateKey));
+  sorted.forEach(sh => {
+    const d = new Date(sh.dateKey + 'T12:00:00');
+    rows.push([
+      d.toLocaleDateString('it-IT'),
+      DAY_NAMES_FULL[d.getDay()],
+      sh.status,
+      sh.start || '',
+      sh.end || '',
+      shiftHours(sh).toFixed(2).replace('.', ','),
+      sh.note || ''
+    ]);
+  });
+  const csv = rows.map(r => r.map(c => `"${c}"`).join(';')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], {type: 'text/csv;charset=utf-8'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `turni-${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// ============================================================
+// OCR — BUSTA PAGA
+// ============================================================
+let currentImageFile = null;
+let tesseractWorker = null;
+
+const btnTakePhoto = document.getElementById('btnTakePhoto');
+const btnPickFile = document.getElementById('btnPickFile');
+const btnManualEntry = document.getElementById('btnManualEntry');
+const btnRunOcr = document.getElementById('btnRunOcr');
+const btnRetake = document.getElementById('btnRetake');
+const btnDismissError = document.getElementById('btnDismissError');
+const ocrFileCamera = document.getElementById('ocrFileCamera');
+const ocrFileGallery = document.getElementById('ocrFileGallery');
+
+btnTakePhoto.addEventListener('click', (e) => {
+  e.preventDefault();
+  ocrFileCamera.click();
+});
+
+btnPickFile.addEventListener('click', (e) => {
+  e.preventDefault();
+  ocrFileGallery.click();
+});
+
+btnManualEntry.addEventListener('click', () => {
+  // Salta OCR e apri direttamente form manuale con valori vuoti
+  currentOcr = {
+    lordo: null, netto: null, inps: null, irpef: null,
+    trattInt: null, addiz: null, oreLav: null, oreSupp: null,
+    oreStraord: null, base: null, rawText: '(inserimento manuale)',
+    timestamp: Date.now()
+  };
+  document.getElementById('ocrUpload').style.display = 'none';
+  document.getElementById('ocrPreview').style.display = 'none';
+  showOcrCompare();
+});
+
+function handleFileSelected(file) {
+  if (!file) return;
+  if (!file.type.startsWith('image/')) {
+    showOcrError('Il file selezionato non è un\'immagine. Usa JPG o PNG.');
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    showOcrError('Immagine troppo grande (max 20 MB). Riduci la qualità o ritaglia la foto.');
+    return;
+  }
+  currentImageFile = file;
+
+  // Mostra anteprima
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    document.getElementById('ocrPreviewImg').src = e.target.result;
+    document.getElementById('ocrUpload').style.display = 'none';
+    document.getElementById('ocrPreview').style.display = 'block';
+    document.getElementById('ocrError').style.display = 'none';
+  };
+  reader.onerror = () => showOcrError('Impossibile leggere il file.');
+  reader.readAsDataURL(file);
+}
+
+ocrFileCamera.addEventListener('change', (e) => {
+  handleFileSelected(e.target.files[0]);
+  e.target.value = '';
+});
+ocrFileGallery.addEventListener('change', (e) => {
+  handleFileSelected(e.target.files[0]);
+  e.target.value = '';
+});
+
+btnRetake.addEventListener('click', () => {
+  currentImageFile = null;
+  document.getElementById('ocrPreview').style.display = 'none';
+  document.getElementById('ocrUpload').style.display = 'block';
+  document.getElementById('ocrResult').style.display = 'none';
+});
+
+btnDismissError.addEventListener('click', () => {
+  document.getElementById('ocrError').style.display = 'none';
+});
+
+function showOcrError(msg) {
+  document.getElementById('ocrErrorMsg').textContent = msg;
+  document.getElementById('ocrError').style.display = 'block';
+  console.error('[Cedolino OCR]', msg);
+}
+
+btnRunOcr.addEventListener('click', async () => {
+  if (!currentImageFile) {
+    showOcrError('Nessuna immagine caricata.');
+    return;
+  }
+  await runOcr(currentImageFile);
+});
+
+async function runOcr(file) {
+  document.getElementById('ocrResult').style.display = 'block';
+  document.getElementById('ocrBar').style.width = '0%';
+  document.getElementById('ocrPercent').textContent = '0%';
+  document.getElementById('ocrStatus').textContent = 'Inizializzazione…';
+  btnRunOcr.disabled = true;
+  btnRunOcr.style.opacity = '0.5';
+  btnRetake.disabled = true;
+  btnRetake.style.opacity = '0.5';
+
+  try {
+    // Verifica che Tesseract sia caricato
+    if (typeof Tesseract === 'undefined') {
+      throw new Error('Libreria OCR non caricata. Controlla la connessione internet e ricarica la pagina.');
+    }
+
+    document.getElementById('ocrStatus').textContent = 'Lettura immagine…';
+
+    const result = await Tesseract.recognize(file, 'ita', {
+      logger: m => {
+        if (m.status === 'loading tesseract core') {
+          document.getElementById('ocrStatus').textContent = 'Caricamento motore OCR…';
+        } else if (m.status === 'loading language traineddata') {
+          document.getElementById('ocrStatus').textContent = 'Caricamento dizionario italiano…';
+        } else if (m.status === 'initializing tesseract') {
+          document.getElementById('ocrStatus').textContent = 'Inizializzazione…';
+        } else if (m.status === 'recognizing text') {
+          const pct = Math.floor(m.progress * 100);
+          document.getElementById('ocrStatus').textContent = 'Riconoscimento testo…';
+          document.getElementById('ocrBar').style.width = pct + '%';
+          document.getElementById('ocrPercent').textContent = pct + '%';
+        }
+      }
+    });
+
+    const text = (result && result.data && result.data.text) ? result.data.text : '';
+    if (!text || text.trim().length < 10) {
+      throw new Error('Nessun testo riconosciuto. Prova con una foto più nitida, in buona luce, ben inquadrata.');
+    }
+
+    currentOcr = parsePayslip(text);
+    currentOcr.rawText = text;
+    currentOcr.timestamp = Date.now();
+
+    // Reset pulsanti
+    btnRunOcr.disabled = false;
+    btnRunOcr.style.opacity = '1';
+    btnRetake.disabled = false;
+    btnRetake.style.opacity = '1';
+
+    document.getElementById('ocrUpload').style.display = 'none';
+    document.getElementById('ocrPreview').style.display = 'none';
+    showOcrCompare();
+
+  } catch(err) {
+    btnRunOcr.disabled = false;
+    btnRunOcr.style.opacity = '1';
+    btnRetake.disabled = false;
+    btnRetake.style.opacity = '1';
+    document.getElementById('ocrResult').style.display = 'none';
+    showOcrError(err.message || 'Errore sconosciuto durante l\'OCR. Riprova o usa l\'inserimento manuale.');
+  }
+}
+
+function parsePayslip(text) {
+  // Parser euristico: cerca pattern comuni nelle buste paga italiane
+  const result = {
+    lordo: null,
+    netto: null,
+    inps: null,
+    irpef: null,
+    trattInt: null,
+    addiz: null,
+    oreLav: null,
+    oreSupp: null,
+    oreStraord: null,
+    base: null
+  };
+
+  // Normalizza: rimpiazza virgole con punti, riconosce numeri italiani
+  const lines = text.split('\n');
+
+  function findAmount(patterns, context) {
+    for (const pat of patterns) {
+      const re = new RegExp(pat, 'i');
+      for (const line of lines) {
+        if (re.test(line)) {
+          // Estrai numeri formato italiano (1.234,56 o 1234,56 o 1234.56)
+          const nums = line.match(/[\d\.]+,\d{2}/g) || line.match(/\d+\.\d{2}/g);
+          if (nums && nums.length > 0) {
+            // Prendi l'ultimo numero della linea (di solito è quello che ci interessa)
+            const val = nums[nums.length - 1].replace(/\./g, '').replace(',', '.');
+            const parsed = parseFloat(val);
+            if (!isNaN(parsed)) return parsed;
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  function findHours(patterns) {
+    for (const pat of patterns) {
+      const re = new RegExp(pat, 'i');
+      for (const line of lines) {
+        if (re.test(line)) {
+          const nums = line.match(/\d+[,.]?\d*/g);
+          if (nums) {
+            for (const n of nums) {
+              const v = parseFloat(n.replace(',', '.'));
+              if (!isNaN(v) && v < 300 && v > 0) return v;
+            }
+          }
+        }
+      }
+    }
+    return null;
+  }
+
+  result.lordo = findAmount(['totale.*compet', 'totale.*lordo', 'imponibile.*previd', 'tot.*comp', 'lordo']);
+  result.netto = findAmount(['netto.*pagare', 'netto.*paga', 'totale.*netto', 'netto a pag']);
+  result.inps = findAmount(['inps\\s*5', 'fap', 'contributo.*ivs', 'contr.*previd', 'inps']);
+  result.irpef = findAmount(['irpef.*netta', 'irpef.*sul.*lavor', 'imposta.*netta', 'irpef']);
+  result.trattInt = findAmount(['trattamento.*integ', 'tratt.*integr', 'bonus.*100', 'l.\\s*21/?20', 'integrativo']);
+  result.addiz = findAmount(['addizion', 'add\\.\\s*regional', 'add\\.\\s*comunal']);
+  result.base = findAmount(['paga.*base', 'minimo.*tabel', 'retr.*base']);
+  result.oreLav = findHours(['ore.*ordin', 'ore.*lavorat', 'ore.*mese', 'ore.*comp']);
+  result.oreSupp = findHours(['ore.*suppl', 'lavoro.*suppl']);
+  result.oreStraord = findHours(['ore.*straord', 'straordinari']);
+
+  return result;
+}
+
+function showOcrCompare() {
+  document.getElementById('ocrResult').style.display = 'none';
+  document.getElementById('ocrCompare').style.display = 'block';
+  renderCompare();
+  document.getElementById('ocrRaw').textContent = currentOcr.rawText;
+  document.getElementById('ocrRaw').style.display = 'none';
+
+  // Editable manual values
+  const mv = document.getElementById('manualValues');
+  const fields = [
+    {key: 'lordo', label: 'Totale competenze (lordo)'},
+    {key: 'inps', label: 'INPS lavoratore'},
+    {key: 'irpef', label: 'IRPEF netta'},
+    {key: 'trattInt', label: 'Trattamento integrativo'},
+    {key: 'addiz', label: 'Addizionali'},
+    {key: 'netto', label: 'Netto a pagare'},
+    {key: 'oreLav', label: 'Ore lavorate'}
+  ];
+  mv.innerHTML = fields.map(f => `
+    <div class="field" style="margin-bottom: 8px;">
+      <label>${f.label}</label>
+      <input type="number" step="0.01" data-key="${f.key}" value="${currentOcr[f.key] !== null ? currentOcr[f.key] : ''}" placeholder="—">
+    </div>`).join('');
+  mv.querySelectorAll('input').forEach(inp => {
+    inp.addEventListener('input', () => {
+      const k = inp.dataset.key;
+      currentOcr[k] = inp.value === '' ? null : parseFloat(inp.value);
+      renderCompare();
+    });
+  });
+}
+
+document.getElementById('btnShowRaw').addEventListener('click', () => {
+  const raw = document.getElementById('ocrRaw');
+  raw.style.display = raw.style.display === 'none' ? 'block' : 'none';
+});
+
+function renderCompare() {
+  const now = new Date();
+  const m = calcMonth(now.getFullYear(), now.getMonth());
+
+  // Verdetto ore esplicito
+  const verdictBody = document.getElementById('oreVerdictBody');
+  const oreRegistrate = m.totale;
+  const oreInBusta = currentOcr.oreLav;
+  let verdictHtml = '';
+
+  if (oreInBusta === null || oreInBusta === undefined) {
+    verdictHtml = `
+      <div class="mono" style="font-size: 1.1rem;">Hai registrato <strong>${fmt.hours(oreRegistrate)}</strong> questo mese.</div>
+      <div class="small muted" style="margin-top: 6px;">Le ore in busta paga non sono state riconosciute dall'OCR. Inseriscile manualmente sotto per il confronto.</div>
+    `;
+  } else {
+    const diff = oreInBusta - oreRegistrate;
+    const absDiff = Math.abs(diff);
+    let chipClass, chipText, msg;
+    if (absDiff < 0.5) {
+      chipClass = 'good';
+      chipText = '✓ COMBACIANO';
+      msg = 'Le ore sul cedolino corrispondono a quelle che hai registrato. Tutto regolare.';
+    } else if (diff > 0) {
+      chipClass = 'good';
+      chipText = `+${absDiff.toFixed(1)}h IN BUSTA`;
+      msg = `In busta ci sono ${absDiff.toFixed(1)}h in più di quelle che hai registrato. Potresti aver dimenticato di tracciare qualche turno, o ci sono ferie/permessi retribuiti contabilizzati.`;
+    } else {
+      chipClass = 'bad';
+      chipText = `−${absDiff.toFixed(1)}h MANCANTI`;
+      msg = `⚠ In busta ci sono ${absDiff.toFixed(1)}h in MENO di quelle registrate. Verifica con l'ufficio paghe — potrebbero esserci ore non conteggiate.`;
+    }
+    verdictHtml = `
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px;">
+        <span class="chip ${chipClass}" style="font-size: .75rem;">${chipText}</span>
+      </div>
+      <div class="kv" style="border-bottom: 1px dashed var(--line);">
+        <span class="k">Ore che hai registrato</span>
+        <span class="v">${fmt.hours(oreRegistrate)}</span>
+      </div>
+      <div class="kv" style="border-bottom: 0;">
+        <span class="k">Ore sul cedolino</span>
+        <span class="v">${fmt.hours(oreInBusta)}</span>
+      </div>
+      <div class="small" style="margin-top: 10px; line-height: 1.5;">${msg}</div>
+    `;
+  }
+  verdictBody.innerHTML = verdictHtml;
+
+  const items = [
+    {name: 'Lordo (competenze)', actual: currentOcr.lordo, expected: m.lordoTot},
+    {name: 'INPS', actual: currentOcr.inps, expected: m.inps, inverse: true},
+    {name: 'IRPEF', actual: currentOcr.irpef, expected: m.irpefNetta, inverse: true},
+    {name: 'Tratt. integrativo', actual: currentOcr.trattInt, expected: m.tratt},
+    {name: 'Addizionali', actual: currentOcr.addiz, expected: m.addiz, inverse: true},
+    {name: 'Netto a pagare', actual: currentOcr.netto, expected: m.netto},
+    {name: 'Ore lavorate', actual: currentOcr.oreLav, expected: m.totale, isHours: true}
+  ];
+
+  const list = document.getElementById('compareList');
+  list.innerHTML = items.map(it => {
+    if (it.actual === null || it.actual === undefined) {
+      return `<div class="compare-row">
+        <span class="name">${it.name}</span>
+        <span class="val muted">—</span>
+        <span class="val">${it.isHours ? fmt.hours(it.expected) : fmt.eur(it.expected)}</span>
+        <span class="delta zero">n.d.</span>
+      </div>`;
+    }
+    const delta = it.actual - it.expected;
+    const absDelta = Math.abs(delta);
+    const tolerance = it.isHours ? 0.5 : 2;
+    let cls = 'zero';
+    let sign = '';
+    if (absDelta < tolerance) {
+      cls = 'good';
+      sign = '✓';
+    } else if (it.inverse) {
+      // Per voci negative (INPS, IRPEF) un valore reale MAGGIORE del previsto è negativo per noi
+      cls = delta > 0 ? 'bad' : 'good';
+      sign = delta > 0 ? '↑' : '↓';
+    } else {
+      cls = delta < 0 ? 'bad' : 'good';
+      sign = delta < 0 ? '↓' : '↑';
+    }
+    return `<div class="compare-row">
+      <span class="name">${it.name}</span>
+      <span class="val">${it.isHours ? fmt.hours(it.actual) : fmt.eur(it.actual)}</span>
+      <span class="val muted">${it.isHours ? fmt.hours(it.expected) : fmt.eur(it.expected)}</span>
+      <span class="delta ${cls}">${sign} ${it.isHours ? absDelta.toFixed(1)+'h' : '€'+absDelta.toFixed(2)}</span>
+    </div>`;
+  }).join('');
+}
+
+document.getElementById('btnSaveBusta').addEventListener('click', () => {
+  if (!currentOcr) return;
+  const now = new Date();
+  buste.push({
+    id: Date.now(),
+    mese: now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0'),
+    data: currentOcr,
+    salvato: new Date().toISOString()
+  });
+  save(STORE.buste, buste);
+  currentOcr = null;
+  document.getElementById('ocrCompare').style.display = 'none';
+  document.getElementById('ocrUpload').style.display = 'block';
+  document.getElementById('ocrPreview').style.display = 'none';
+  document.getElementById('ocrResult').style.display = 'none';
+  currentImageFile = null;
+  renderBuste();
+  alert('Confronto salvato.');
+});
+
+document.getElementById('btnDiscardOcr').addEventListener('click', () => {
+  currentOcr = null;
+  currentImageFile = null;
+  document.getElementById('ocrCompare').style.display = 'none';
+  document.getElementById('ocrUpload').style.display = 'block';
+  document.getElementById('ocrPreview').style.display = 'none';
+  document.getElementById('ocrResult').style.display = 'none';
+});
+
+function renderBuste() {
+  const list = document.getElementById('bustaList');
+  if (buste.length === 0) {
+    list.innerHTML = '<div class="empty"><span class="ico">∅</span><div class="small">Nessun cedolino salvato</div></div>';
+    return;
+  }
+  const sorted = [...buste].sort((a,b) => new Date(b.salvato) - new Date(a.salvato));
+  list.innerHTML = sorted.map(b => {
+    const [y, mo] = b.mese.split('-');
+    const monthName = new Date(parseInt(y), parseInt(mo)-1, 1).toLocaleDateString('it-IT', {month: 'long', year: 'numeric'});
+    return `<div class="shift-item" data-id="${b.id}">
+      <div class="shift-date">
+        <div class="day">${mo}</div>
+        <div class="month">${y}</div>
+      </div>
+      <div class="shift-info">
+        <div class="time">${monthName.charAt(0).toUpperCase() + monthName.slice(1)}</div>
+        <div class="meta">Netto: ${b.data.netto ? fmt.eur(b.data.netto) : 'n.d.'} • Lordo: ${b.data.lordo ? fmt.eur(b.data.lordo) : 'n.d.'}</div>
+      </div>
+      <div class="shift-hours">
+        <span class="chip accent">✓</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('.shift-item').forEach(el => {
+    el.addEventListener('click', () => {
+      const id = parseInt(el.dataset.id);
+      if (confirm('Eliminare questo cedolino salvato?')) {
+        buste = buste.filter(b => b.id !== id);
+        save(STORE.buste, buste);
+        renderBuste();
+      }
+    });
+  });
+}
+
+// ============================================================
+// FERIE & PERMESSI (CCNL Commercio Confcommercio)
+// ============================================================
+const FERIE_ANNUE = 26; // CCNL Commercio art. 147
+const ROL_ORE_ANNUE = 56; // Aziende fino a 15 dipendenti (CCNL Commercio)
+// Ratei mensili
+const FERIE_RATEO_MESE = FERIE_ANNUE / 12; // 2,1667 giorni/mese
+
+let viewYear = new Date().getFullYear();
+
+// Calcola ferie maturate fino a una data, in base al contratto
+function calcFerieMaturate(toDate, year) {
+  if (!cfg.inizio) return 0;
+  const inizio = new Date(cfg.inizio + 'T12:00:00');
+  if (toDate < inizio) return 0;
+
+  // Considero solo i mesi dell'anno richiesto
+  let mesi = 0;
+  for (let m = 0; m < 12; m++) {
+    const meseStart = new Date(year, m, 1);
+    const meseEnd = new Date(year, m + 1, 0); // ultimo giorno del mese
+
+    // Salta mesi futuri rispetto a oggi
+    if (meseStart > toDate) break;
+
+    // Salta mesi prima dell'inizio contratto
+    if (meseEnd < inizio) continue;
+
+    // Effettivi giorni lavorabili del mese (dopo inizio contratto e prima di toDate)
+    const dStart = (meseStart < inizio) ? inizio : meseStart;
+    const dEnd = (meseEnd > toDate) ? toDate : meseEnd;
+    const giorniNelMese = Math.floor((dEnd - dStart) / (1000*60*60*24)) + 1;
+
+    // Regola CCNL: matura il rateo se almeno 15 giorni nel mese
+    if (giorniNelMese >= 15) {
+      mesi += 1;
+    } else if (giorniNelMese > 0) {
+      // Per il mese parziale (es. maggio iniziato il 5), proporzionale
+      // Se è il mese in corso e non sono passati 15 giorni, non matura ancora
+      // Ma se è un mese passato con meno di 15 giorni effettivi, non matura
+      // (es. ultimo mese contratto)
+      mesi += giorniNelMese / 30; // proporzionale
+    }
+  }
+
+  return mesi * FERIE_RATEO_MESE;
+}
+
+// Calcola rateo del mese corrente (0..1)
+function calcRateoMese(refDate, year) {
+  if (!cfg.inizio) return {giorni: 0, pct: 0, mese: refDate.getMonth()};
+  const inizio = new Date(cfg.inizio + 'T12:00:00');
+  const mese = refDate.getMonth();
+  if (refDate.getFullYear() !== year) return {giorni: 0, pct: 0, mese: mese};
+
+  const meseStart = new Date(year, mese, 1);
+  const meseEnd = new Date(year, mese + 1, 0);
+  const giorniMese = meseEnd.getDate();
+
+  // Inizio effettivo nel mese
+  const dStart = (meseStart < inizio) ? inizio : meseStart;
+  const dRef = (refDate > meseEnd) ? meseEnd : refDate;
+
+  if (dStart > dRef) return {giorni: 0, pct: 0, mese: mese};
+
+  const giorniTrascorsi = Math.floor((dRef - dStart) / (1000*60*60*24)) + 1;
+  const giorniTotaliMese = Math.floor((meseEnd - dStart) / (1000*60*60*24)) + 1;
+  const pct = Math.min(1, giorniTrascorsi / giorniTotaliMese);
+  return {
+    giorni: pct * FERIE_RATEO_MESE,
+    pct: pct,
+    mese: mese,
+    giorniTrascorsi,
+    giorniTotaliMese
+  };
+}
+
+// Calcola ferie godute nell'anno dai turni segnati "ferie"
+// Conteggio CCNL: settimana di 6 giorni, ogni giorno feriale segnato come ferie conta 1
+function calcFerieGodute(year) {
+  const sf = shifts.filter(s => {
+    if (s.status !== 'ferie') return false;
+    if (!s.dateKey) return false;
+    const d = new Date(s.dateKey + 'T12:00:00');
+    return d.getFullYear() === year && d.getDay() !== 0; // escluso domenica (CCNL)
+  });
+  return sf.length;
+}
+
+// Calcola permessi ROL goduti (in ore) - usa giorni con status 'permesso'
+// Conteggio: il permesso può essere a ore (default = ore previste del turno)
+function calcRolGoduti(year) {
+  const sp = shifts.filter(s => {
+    if (s.status !== 'permesso') return 0;
+    if (!s.dateKey) return false;
+    const d = new Date(s.dateKey + 'T12:00:00');
+    return d.getFullYear() === year;
+  });
+  // Per ogni permesso, conta le ore = orario standard PT (5h per il tuo caso)
+  // Se il permesso ha 'permessoOre' uso quello, altrimenti default
+  return sp.reduce((tot, s) => tot + (s.permessoOre || (cfg.orePT / 5)), 0);
+}
+
+// ROL maturati = quota proporzionale all'anno trascorso
+function calcRolMaturati(toDate, year) {
+  if (!cfg.inizio) return 0;
+  const inizio = new Date(cfg.inizio + 'T12:00:00');
+  if (toDate < inizio) return 0;
+
+  // Quota proporzionale al PT
+  const rolAnnui = ROL_ORE_ANNUE * (cfg.orePT / 40);
+
+  const annoStart = new Date(year, 0, 1);
+  const annoEnd = new Date(year, 11, 31, 23, 59);
+  const dStart = (annoStart < inizio) ? inizio : annoStart;
+  const dRef = (toDate > annoEnd) ? annoEnd : toDate;
+
+  if (dStart > dRef) return 0;
+
+  const giorniTotali = Math.floor((annoEnd - dStart) / (1000*60*60*24)) + 1;
+  const giorniMaturati = Math.floor((dRef - dStart) / (1000*60*60*24)) + 1;
+  return rolAnnui * (giorniMaturati / giorniTotali);
+}
+
+function renderFerie() {
+  const today = new Date();
+  const year = viewYear;
+  const isCurrentYear = (year === today.getFullYear());
+  const refDate = isCurrentYear ? today : new Date(year, 11, 31);
+
+  document.getElementById('yearLabel').textContent = year;
+  document.getElementById('ferieYearShow').textContent = year;
+
+  // Sottotitolo
+  let yearSub = '';
+  if (year < today.getFullYear()) yearSub = 'Anno passato';
+  else if (year === today.getFullYear()) yearSub = 'Anno corrente';
+  else yearSub = 'Anno futuro';
+  document.getElementById('yearSub').textContent = yearSub;
+
+  // ===== FERIE =====
+  const maturate = calcFerieMaturate(refDate, year);
+  const godute = calcFerieGodute(year);
+  const disponibili = Math.max(0, maturate - godute);
+
+  document.getElementById('ferieMaturate').textContent = maturate.toFixed(2).replace('.', ',');
+  document.getElementById('ferieGodute').textContent = godute;
+  document.getElementById('ferieTotali').textContent = FERIE_ANNUE;
+  document.getElementById('ferieRingNum').textContent = disponibili.toFixed(1).replace('.', ',');
+
+  // Mostra data di riferimento del calcolo
+  const refDateStr = refDate.toLocaleDateString('it-IT', {weekday: 'long', day: 'numeric', month: 'long', year: 'numeric'});
+  document.getElementById('ferieRefDate').textContent = `Calcolato al ${refDateStr}`;
+
+  // Ring ferie (circonferenza = 2*pi*42 = 263.89)
+  const ferieCircle = document.getElementById('ferieCircle');
+  const ferieRatio = Math.min(1, disponibili / FERIE_ANNUE);
+  ferieCircle.style.strokeDashoffset = (263.89 * (1 - ferieRatio)).toFixed(2);
+
+  // ===== RATEO MESE =====
+  const rateo = calcRateoMese(refDate, year);
+  const mesiNomi = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
+  document.getElementById('meseChipFerie').textContent = mesiNomi[rateo.mese];
+  document.getElementById('rateoMese').textContent = rateo.giorni.toFixed(2).replace('.', ',');
+  document.getElementById('rateoBar').style.width = (rateo.pct * 100).toFixed(0) + '%';
+  document.getElementById('rateoPct').textContent = (rateo.pct * 100).toFixed(0) + '%';
+
+  let rateoNote = '';
+  if (!isCurrentYear) {
+    rateoNote = 'Anno completato o non iniziato — nessun rateo in corso.';
+  } else if (rateo.pct < 0.5) {
+    rateoNote = `Sei a ${(rateo.pct*100).toFixed(0)}% del mese. Il rateo si completa il ${new Date(refDate.getFullYear(), refDate.getMonth() + 1, 0).toLocaleDateString('it-IT', {day: 'numeric', month: 'long'})}.`;
+  } else if (rateo.pct < 1) {
+    rateoNote = `Quasi completato il rateo del mese (${rateo.giorni.toFixed(2)} giorni su 2,17).`;
+  } else {
+    rateoNote = 'Rateo del mese completato.';
+  }
+  document.getElementById('rateoNote').textContent = rateoNote;
+
+  // ===== ROL =====
+  const rolMaturati = calcRolMaturati(refDate, year);
+  const rolGoduti = calcRolGoduti(year);
+  const rolDisp = Math.max(0, rolMaturati - rolGoduti);
+  const rolAnnui = ROL_ORE_ANNUE * (cfg.orePT / 40);
+
+  document.getElementById('rolMaturati').textContent = rolMaturati.toFixed(1).replace('.', ',');
+  document.getElementById('rolGoduti').textContent = rolGoduti.toFixed(1).replace('.', ',');
+  document.getElementById('rolTotali').textContent = rolAnnui.toFixed(0);
+  document.getElementById('rolRingNum').textContent = rolDisp.toFixed(1).replace('.', ',');
+
+  const rolCircle = document.getElementById('rolCircle');
+  const rolRatio = Math.min(1, rolDisp / rolAnnui);
+  rolCircle.style.strokeDashoffset = (263.89 * (1 - rolRatio)).toFixed(2);
+
+  let rolNote = `Quota annua riproporzionata al tuo part-time (${cfg.orePT}h/40h) = ${rolAnnui.toFixed(0)} ore. `;
+  if (rolGoduti > 0) {
+    rolNote += `Hai goduto ${rolGoduti.toFixed(1)}h di permessi quest'anno.`;
+  } else {
+    rolNote += `Nessun permesso utilizzato finora.`;
+  }
+  document.getElementById('rolNote').textContent = rolNote;
+
+  // ===== STORICO =====
+  renderFerieHistory(year);
+
+  // Aggiorna pianificatore se attivo
+  updatePlanner();
+}
+
+function renderFerieHistory(year) {
+  // Raggruppa giorni di ferie consecutivi in periodi
+  const ferieDays = shifts
+    .filter(s => s.status === 'ferie' && s.dateKey && new Date(s.dateKey).getFullYear() === year)
+    .map(s => s.dateKey)
+    .sort();
+
+  if (ferieDays.length === 0) {
+    document.getElementById('ferieHistory').innerHTML = `<div class="empty"><span class="ico">∅</span><div class="small">Nessuna ferie goduta nel ${year}</div></div>`;
+    return;
+  }
+
+  // Raggruppa in periodi consecutivi
+  const periodi = [];
+  let curr = {start: ferieDays[0], end: ferieDays[0], count: 1};
+  for (let i = 1; i < ferieDays.length; i++) {
+    const prev = new Date(curr.end + 'T12:00:00');
+    const next = new Date(ferieDays[i] + 'T12:00:00');
+    const diffDays = Math.round((next - prev) / (1000*60*60*24));
+    if (diffDays <= 2) { // consecutivi o con domenica/festivo in mezzo
+      curr.end = ferieDays[i];
+      curr.count++;
+    } else {
+      periodi.push(curr);
+      curr = {start: ferieDays[i], end: ferieDays[i], count: 1};
+    }
+  }
+  periodi.push(curr);
+
+  document.getElementById('ferieHistory').innerHTML = periodi.reverse().map(p => {
+    const d1 = new Date(p.start + 'T12:00:00');
+    const d2 = new Date(p.end + 'T12:00:00');
+    const single = p.start === p.end;
+    const range = single
+      ? d1.toLocaleDateString('it-IT', {day: 'numeric', month: 'long'})
+      : `${d1.toLocaleDateString('it-IT', {day: 'numeric', month: 'short'})} → ${d2.toLocaleDateString('it-IT', {day: 'numeric', month: 'short'})}`;
+    return `<div class="ferie-history-item">
+      <div>
+        <div class="fh-range">${range}</div>
+        <div class="fh-dates">${single ? 'giornata singola' : p.count + ' giorni'}</div>
+      </div>
+      <div class="fh-count">${p.count}g</div>
+    </div>`;
+  }).join('');
+}
+
+function updatePlanner() {
+  const from = document.getElementById('planFrom').value;
+  const to = document.getElementById('planTo').value;
+  if (!from || !to) {
+    document.getElementById('planResult').style.display = 'none';
+    return;
+  }
+  const dFrom = new Date(from + 'T12:00:00');
+  const dTo = new Date(to + 'T12:00:00');
+  if (dTo < dFrom) {
+    document.getElementById('planResult').style.display = 'none';
+    return;
+  }
+
+  // Conteggio CCNL: tutti i giorni lun-sab del periodo
+  let consumati = 0;
+  const cursor = new Date(dFrom);
+  while (cursor <= dTo) {
+    if (cursor.getDay() !== 0) consumati++; // escluso domenica
+    cursor.setDate(cursor.getDate() + 1);
+  }
+
+  const today = new Date();
+  const maturate = calcFerieMaturate(today, viewYear);
+  const godute = calcFerieGodute(viewYear);
+  const disponibili = Math.max(0, maturate - godute);
+  const resta = disponibili - consumati;
+
+  document.getElementById('planConsumati').textContent = consumati;
+  document.getElementById('planDisponibili').textContent = disponibili.toFixed(1).replace('.', ',');
+  document.getElementById('planResta').textContent = resta.toFixed(1).replace('.', ',');
+
+  const msgEl = document.getElementById('planMsg');
+  if (resta < 0) {
+    msgEl.innerHTML = `<span style="color: var(--bad);">⚠ Ti mancherebbero ${Math.abs(resta).toFixed(1).replace('.', ',')} giorni. Sposta a date più avanti per maturare il rateo necessario.</span>`;
+  } else if (resta < 5) {
+    msgEl.innerHTML = `<span style="color: var(--warn);">⚠ Resterebbero pochi giorni per il resto dell'anno.</span>`;
+  } else {
+    msgEl.innerHTML = `<span style="color: var(--good);">✓ Hai disponibilità sufficiente.</span>`;
+  }
+
+  document.getElementById('planResult').style.display = 'block';
+}
+
+// Event listener navigazione anno
+document.getElementById('btnYearPrev').addEventListener('click', () => {
+  viewYear--;
+  renderFerie();
+});
+document.getElementById('btnYearNext').addEventListener('click', () => {
+  viewYear++;
+  renderFerie();
+});
+
+// Pianificatore
+document.getElementById('planFrom').addEventListener('change', updatePlanner);
+document.getElementById('planTo').addEventListener('change', updatePlanner);
+
+// ============================================================
+// CONFIG
+// ============================================================
+function loadCfgToForm() {
+  document.getElementById('cfg-ccnl').value = cfg.ccnl;
+  document.getElementById('cfg-livello').value = cfg.livello;
+  document.getElementById('cfg-orePT').value = cfg.orePT;
+  document.getElementById('cfg-lordo').value = cfg.lordo;
+  document.getElementById('cfg-orario').value = cfg.orario;
+  document.getElementById('cfg-mensilita').value = cfg.mensilita;
+  document.getElementById('cfg-inizio').value = cfg.inizio;
+  document.getElementById('cfg-suppl').value = cfg.suppl;
+  document.getElementById('cfg-stra').value = cfg.stra;
+  document.getElementById('cfg-dom').value = cfg.dom;
+  document.getElementById('cfg-nott').value = cfg.nott;
+  document.getElementById('cfg-inps').value = cfg.inps;
+  document.getElementById('cfg-irpef').value = cfg.irpef;
+  document.getElementById('cfg-bonus').value = cfg.bonus;
+  document.getElementById('cfg-addiz').value = cfg.addiz;
+}
+
+document.getElementById('btnSaveCfg').addEventListener('click', () => {
+  cfg.ccnl = document.getElementById('cfg-ccnl').value;
+  cfg.livello = parseInt(document.getElementById('cfg-livello').value);
+  cfg.orePT = parseFloat(document.getElementById('cfg-orePT').value);
+  cfg.lordo = parseFloat(document.getElementById('cfg-lordo').value);
+  cfg.orario = parseFloat(document.getElementById('cfg-orario').value);
+  cfg.mensilita = parseInt(document.getElementById('cfg-mensilita').value);
+  cfg.inizio = document.getElementById('cfg-inizio').value;
+  cfg.suppl = parseFloat(document.getElementById('cfg-suppl').value);
+  cfg.stra = parseFloat(document.getElementById('cfg-stra').value);
+  cfg.dom = parseFloat(document.getElementById('cfg-dom').value);
+  cfg.nott = parseFloat(document.getElementById('cfg-nott').value);
+  cfg.inps = parseFloat(document.getElementById('cfg-inps').value);
+  cfg.irpef = parseFloat(document.getElementById('cfg-irpef').value);
+  cfg.bonus = parseFloat(document.getElementById('cfg-bonus').value);
+  cfg.addiz = parseFloat(document.getElementById('cfg-addiz').value);
+  save(STORE.cfg, cfg);
+  renderDashboard();
+  alert('Configurazione salvata.');
+});
+
+document.getElementById('btnResetCfg').addEventListener('click', () => {
+  if (confirm('Ripristinare i valori predefiniti del contratto?')) {
+    cfg = {...DEFAULT_CFG};
+    save(STORE.cfg, cfg);
+    loadCfgToForm();
+    renderDashboard();
+  }
+});
+
+document.getElementById('btnWipe').addEventListener('click', () => {
+  if (confirm('Cancellare TUTTI i dati (turni, cedolini, configurazione)? L\'azione è irreversibile.')) {
+    localStorage.clear();
+    location.reload();
+  }
+});
+
+// ============================================================
+// INIT
+// ============================================================
+loadCfgToForm();
+renderDashboard();
+renderWeek();
+renderBuste();
+
+// Prevent accidental zoom on iOS
+document.addEventListener('gesturestart', e => e.preventDefault());
+</script>
+
+</body>
+</html>
