@@ -376,6 +376,7 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
   min-width: 50px;
 }
 .day-hours .sub { display: block; font-size: .68rem; color: var(--ink-soft); font-weight: 400; margin-top: 1px; }
+.day-hours .equiv-hours { color: var(--good); opacity: .85; }
 
 .status-badge {
   display: inline-block;
@@ -940,6 +941,23 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
 
   <div class="divider"></div>
 
+  <!-- BACKUP DATI -->
+  <div class="card">
+    <h3 style="margin-bottom: 6px;">Backup dei dati</h3>
+    <p class="tiny muted" style="margin-bottom: 14px; line-height: 1.5;">Salva o ripristina tutti i tuoi dati (turni, ferie, cedolini, configurazione). Utile prima di aggiornare l'app, cambiare telefono o per sicurezza periodica.</p>
+
+    <div class="btn-row" style="margin-bottom: 10px;">
+      <button class="btn primary" id="btnBackupExport">📤 Esporta backup</button>
+      <button class="btn ghost" id="btnBackupImport">📥 Importa backup</button>
+    </div>
+    <input type="file" id="backupFile" accept=".json,application/json" style="display: none;">
+
+    <div id="backupInfo" class="tiny muted" style="margin-top: 10px; padding: 10px; background: var(--bg-soft); border-radius: 8px; line-height: 1.5;">
+      <strong>Ultimo backup:</strong> <span id="backupLastDate">mai effettuato</span><br>
+      <strong>Dati attuali:</strong> <span id="backupCurrentInfo">—</span>
+    </div>
+  </div>
+
   <div class="card flat" style="background: var(--bg-soft); border: 0;">
     <h3 style="margin-bottom: 8px;">Note sul calcolo</h3>
     <p class="small" style="line-height: 1.6;">Le stime sono indicative. Il netto è calcolato applicando INPS, IRPEF al netto delle detrazioni standard (~€163/mese) e il trattamento integrativo. Addizionali regionali e comunali sono trattenute solo sulle mensilità ordinarie. Tredicesima e quattordicesima sono tassate senza bonus e detrazioni.</p>
@@ -1010,6 +1028,24 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
       <div class="field">
         <label>Note (facoltativo)</label>
         <input type="text" id="m-note" placeholder="es. turno extra, copertura collega">
+      </div>
+    </div>
+
+    <div id="modalAbsenceFields" style="display: none;">
+      <div class="field">
+        <label>Ore equivalenti retribuite</label>
+        <input type="number" id="m-equiv" step="0.5" min="0" max="12" value="4">
+        <div class="tiny muted" style="margin-top: 4px;">Quante ore "vale" questo giorno per il monte settimanale (default: turno standard del giorno)</div>
+      </div>
+      <div class="field" style="background: var(--bg-soft); padding: 10px 12px; border-radius: 8px; margin-bottom: 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <span class="label" style="margin: 0;">Sintesi</span>
+          <span class="mono" style="font-weight: 600; font-size: 1rem;" id="m-equiv-show">4,00 h equiv.</span>
+        </div>
+      </div>
+      <div class="field">
+        <label>Note (facoltativo)</label>
+        <input type="text" id="m-note-abs" placeholder="es. visita medica, festività religiosa">
       </div>
     </div>
 
@@ -1429,6 +1465,24 @@ function shiftHours(s) {
   return Math.max(0, minutes / 60);
 }
 
+// Ore "equivalenti": include lavoro effettivo + ore di assenze retribuite (ferie/malattia/permesso)
+// Usate per il monte settimanale e per la base retributiva
+function shiftEquivHours(s) {
+  if (!s) return 0;
+  if (s.status === 'lavoro') return shiftHours(s);
+  if (['ferie', 'malattia', 'permesso'].includes(s.status)) {
+    // Se oreEquiv è impostato esplicitamente, usalo
+    if (s.oreEquiv !== undefined && s.oreEquiv !== null) return s.oreEquiv;
+    // Default per turni vecchi senza oreEquiv: 4h (pomeriggio infrasettimanale), 5h se sabato
+    if (s.dateKey) {
+      const d = new Date(s.dateKey + 'T12:00:00');
+      return d.getDay() === 6 ? 5 : 4;
+    }
+    return 4;
+  }
+  return 0;
+}
+
 // Renderizza la settimana corrente (lun-sab)
 function renderWeek() {
   // Calcola le 6 date della settimana (lun-sab)
@@ -1453,23 +1507,28 @@ function renderWeek() {
   document.getElementById('weekLabel').textContent = label;
   document.getElementById('weekRange').textContent = `${fmtD(days[0])} → ${fmtD(lastDay)}`;
 
-  // Calcola ore totali settimana e info sabato
-  let totalHours = 0;
+  // Calcola ore totali settimana (lavoro + ferie/malattia/permesso equivalenti)
+  let totalHours = 0; // ore di lavoro effettivo
+  let totalEquiv = 0; // ore di assenze retribuite
   let workedDays = 0;
   let hasSabato = false;
   days.forEach(d => {
     const sh = getShiftForDate(dateKey(d));
-    if (sh && sh.status === 'lavoro') {
+    if (!sh) return;
+    if (sh.status === 'lavoro') {
       totalHours += shiftHours(sh);
       workedDays++;
       if (d.getDay() === 6) hasSabato = true;
+    } else if (['ferie', 'malattia', 'permesso'].includes(sh.status)) {
+      totalEquiv += shiftEquivHours(sh);
     }
   });
+  const totalCombined = totalHours + totalEquiv;
 
-  // Aggiorna sommario settimana
-  document.getElementById('weekHours').textContent = fmt.hours(totalHours);
+  // Aggiorna sommario settimana — mostra il totale combinato vs target
+  document.getElementById('weekHours').textContent = fmt.hours(totalCombined);
   document.getElementById('weekTarget').textContent = fmt.hours(cfg.orePT);
-  const delta = totalHours - cfg.orePT;
+  const delta = totalCombined - cfg.orePT;
   const deltaEl = document.getElementById('weekDelta');
   if (Math.abs(delta) < 0.05) {
     deltaEl.textContent = '✓ giusto';
@@ -1482,17 +1541,21 @@ function renderWeek() {
     deltaEl.style.color = 'var(--bad)';
   }
 
-  // Progress bar
-  const pct = Math.min(100, (totalHours / cfg.orePT) * 100);
+  // Progress bar — usa totale combinato
+  const pct = Math.min(100, (totalCombined / cfg.orePT) * 100);
   const bar = document.getElementById('weekProgressBar');
   bar.style.width = pct + '%';
   bar.classList.remove('complete', 'over');
   if (Math.abs(delta) < 0.05) bar.classList.add('complete');
   else if (delta > 0) bar.classList.add('over');
 
-  // Info contestuale (sabato lavorato?)
-  const sabatoStatus = checkSabatoPattern();
-  document.getElementById('weekInfo').textContent = sabatoStatus;
+  // Info contestuale (sabato + breakdown ore assenze se presenti)
+  let infoText = checkSabatoPattern();
+  if (totalEquiv > 0) {
+    const breakdown = `${fmt.hours(totalHours)} lavorate + ${fmt.hours(totalEquiv)} retribuite (ferie/malattia/permesso)`;
+    infoText = breakdown + (infoText ? ' • ' + infoText : '');
+  }
+  document.getElementById('weekInfo').textContent = infoText;
 
   // Renderizza i 6 giorni
   const container = document.getElementById('weekDays');
@@ -1529,7 +1592,13 @@ function renderWeek() {
         };
         infoHtml = `<span class="status-badge">${labels[sh.status]}</span>`;
         if (sh.note) infoHtml += `<div class="meta" style="margin-top:4px;">${sh.note}</div>`;
-        hoursHtml = `<span class="muted small">—</span>`;
+        // Mostro ore equivalenti per ferie/malattia/permesso (sempre, default da shiftEquivHours)
+        if (['ferie', 'malattia', 'permesso'].includes(sh.status)) {
+          const equiv = shiftEquivHours(sh);
+          hoursHtml = `<span class="equiv-hours">${equiv.toFixed(2).replace('.', ',')}h<span class="sub">equiv.</span></span>`;
+        } else {
+          hoursHtml = `<span class="muted small">—</span>`;
+        }
       }
     } else if (d.getDay() === 6 && !isPreContratto) {
       // Sabato vuoto → suggerimento (solo se non è pre-contratto)
@@ -1663,6 +1732,18 @@ function openDayEditor(dateK) {
   else document.getElementById('m-end').value = '13:30';
   document.getElementById('m-note').value = sh ? (sh.note || '') : '';
 
+  // Imposta ore equivalenti per assenze
+  let defaultEquiv;
+  if (sh && sh.oreEquiv !== undefined && sh.oreEquiv !== null) {
+    defaultEquiv = sh.oreEquiv;
+  } else {
+    // Calcolo intelligente: guarda gli altri turni della settimana
+    defaultEquiv = suggestEquivHours(dateK, d);
+  }
+  document.getElementById('m-equiv').value = defaultEquiv;
+  document.getElementById('m-equiv-show').textContent = defaultEquiv.toFixed(2).replace('.', ',') + ' h equiv.';
+  document.getElementById('m-note-abs').value = sh ? (sh.note || '') : '';
+
   // Reset menu preset
   const preset = document.getElementById('m-preset');
   if (preset) preset.value = '';
@@ -1674,9 +1755,39 @@ function openDayEditor(dateK) {
   document.getElementById('modalShift').classList.add('show');
 }
 
+// Calcola ore equivalenti di default per un giorno di assenza
+// Guarda gli altri giorni della stessa settimana per capire se sei in turno mattino/pomeriggio
+function suggestEquivHours(dateK, dayObj) {
+  const dow = dayObj.getDay();
+  // Se è sabato, default 5h (il sabato lavorato è sempre 8:30-13:30)
+  if (dow === 6) return 5;
+
+  // Cerca turni nella stessa settimana
+  const weekStart = getWeekStart(dayObj);
+  let totHours = 0, n = 0;
+  for (let i = 0; i < 5; i++) { // lun-ven
+    const d = new Date(weekStart);
+    d.setDate(d.getDate() + i);
+    const k = dateKey(d);
+    if (k === dateK) continue;
+    const sh = getShiftForDate(k);
+    if (sh && sh.status === 'lavoro') {
+      totHours += shiftHours(sh);
+      n++;
+    }
+  }
+  if (n > 0) {
+    return Math.round((totHours / n) * 2) / 2; // arrotondo a 0,5h
+  }
+  // Default fallback: 4h (pomeriggio infrasettimanale)
+  return 4;
+}
+
 function toggleTimeFields() {
-  const show = editingStatus === 'lavoro';
-  document.getElementById('modalTimeFields').style.display = show ? 'block' : 'none';
+  const isLavoro = editingStatus === 'lavoro';
+  const isAssenza = ['ferie', 'malattia', 'permesso'].includes(editingStatus);
+  document.getElementById('modalTimeFields').style.display = isLavoro ? 'block' : 'none';
+  document.getElementById('modalAbsenceFields').style.display = isAssenza ? 'block' : 'none';
 }
 
 // Selezione stato nel modal
@@ -1723,6 +1834,22 @@ document.getElementById('m-end').addEventListener('change', updateDuration);
 document.getElementById('m-start').addEventListener('input', updateDuration);
 document.getElementById('m-end').addEventListener('input', updateDuration);
 
+// Live update campo ore equivalenti
+function updateEquivShow() {
+  const v = parseFloat(document.getElementById('m-equiv').value);
+  const el = document.getElementById('m-equiv-show');
+  if (!el) return;
+  if (isNaN(v) || v < 0) {
+    el.textContent = '— h equiv.';
+    el.style.color = 'var(--bad)';
+  } else {
+    el.textContent = v.toFixed(2).replace('.', ',') + ' h equiv.';
+    el.style.color = 'var(--ink)';
+  }
+}
+document.getElementById('m-equiv').addEventListener('input', updateEquivShow);
+document.getElementById('m-equiv').addEventListener('change', updateEquivShow);
+
 // Salva giorno modificato
 document.getElementById('btnSaveShift').addEventListener('click', () => {
   if (!editingDate) return;
@@ -1733,8 +1860,7 @@ document.getElementById('btnSaveShift').addEventListener('click', () => {
   const newShift = {
     id: Date.now(),
     dateKey: editingDate,
-    status: editingStatus,
-    note: document.getElementById('m-note').value.trim()
+    status: editingStatus
   };
 
   if (editingStatus === 'lavoro') {
@@ -1746,6 +1872,16 @@ document.getElementById('btnSaveShift').addEventListener('click', () => {
     if ((eh * 60 + em) <= (sh * 60 + sm)) { alert('L\'orario di fine deve essere dopo l\'inizio'); return; }
     newShift.start = start;
     newShift.end = end;
+    newShift.note = document.getElementById('m-note').value.trim();
+  } else if (['ferie', 'malattia', 'permesso'].includes(editingStatus)) {
+    // Salva ore equivalenti per le assenze retribuite
+    const equiv = parseFloat(document.getElementById('m-equiv').value);
+    if (isNaN(equiv) || equiv < 0) { alert('Inserisci ore equivalenti valide'); return; }
+    newShift.oreEquiv = equiv;
+    newShift.note = document.getElementById('m-note-abs').value.trim();
+  } else {
+    // riposo/festivo
+    newShift.note = '';
   }
 
   shifts.push(newShift);
@@ -1826,12 +1962,15 @@ function renderMonthSummary() {
   }
 
   let monthTotal = 0;
+  let monthEquivTotal = 0;
   let monthSabati = 0;
   let monthMalattia = 0;
   let monthFerie = 0;
+  let monthPermesso = 0;
 
   const rows = weeks.map((wStart, i) => {
     let wHours = 0;
+    let wEquiv = 0;
     let wDays = 0;
     let hasSabato = false;
     for (let j = 0; j < 6; j++) {
@@ -1839,51 +1978,78 @@ function renderMonthSummary() {
       d.setDate(d.getDate() + j);
       if (d.getMonth() !== month) continue;
       const sh = getShiftForDate(dateKey(d));
-      if (sh && sh.status === 'lavoro') {
+      if (!sh) continue;
+      if (sh.status === 'lavoro') {
         wHours += shiftHours(sh);
         wDays++;
         if (d.getDay() === 6) { hasSabato = true; monthSabati++; }
-      } else if (sh && sh.status === 'malattia') monthMalattia++;
-      else if (sh && sh.status === 'ferie') monthFerie++;
+      } else if (sh.status === 'malattia') {
+        monthMalattia++;
+        wEquiv += shiftEquivHours(sh);
+      } else if (sh.status === 'ferie') {
+        monthFerie++;
+        wEquiv += shiftEquivHours(sh);
+      } else if (sh.status === 'permesso') {
+        monthPermesso++;
+        wEquiv += shiftEquivHours(sh);
+      }
     }
     monthTotal += wHours;
+    monthEquivTotal += wEquiv;
+    const wCombined = wHours + wEquiv;
 
     const wEnd = new Date(wStart); wEnd.setDate(wEnd.getDate() + 5);
     const label = `Sett. ${i + 1}`;
     const range = `${wStart.getDate()}–${wEnd.getDate()}`;
     let chip = '';
-    if (wHours > 0) {
-      const delta = wHours - cfg.orePT;
+    if (wCombined > 0) {
+      const delta = wCombined - cfg.orePT;
       if (Math.abs(delta) < 0.05) chip = '<span class="chip good">✓</span>';
       else if (delta < 0) chip = `<span class="chip warn">−${Math.abs(delta).toFixed(1)}</span>`;
       else chip = `<span class="chip bad">+${delta.toFixed(1)}</span>`;
     }
     if (hasSabato) chip += ' <span class="chip accent">SAB</span>';
 
+    // Mostro ore lavorate + eq separati se ci sono assenze
+    let hoursDisplay = fmt.hours(wCombined);
+    if (wEquiv > 0 && wHours > 0) {
+      hoursDisplay = `<span style="color: var(--ink);">${fmt.hours(wHours)}</span><span class="tiny" style="color: var(--good); margin-left: 4px;">+ ${fmt.hours(wEquiv)} eq.</span>`;
+    } else if (wEquiv > 0) {
+      hoursDisplay = `<span class="tiny" style="color: var(--good);">${fmt.hours(wEquiv)} eq.</span>`;
+    }
+
     return `
       <div class="month-week-row">
         <span class="wname">${label} <span class="muted">${range}</span></span>
-        <span class="whrs">${fmt.hours(wHours)}</span>
+        <span class="whrs">${hoursDisplay}</span>
         <span>${chip}</span>
       </div>`;
   }).join('');
 
   let extraInfo = '';
-  if (monthMalattia > 0 || monthFerie > 0) {
+  if (monthMalattia > 0 || monthFerie > 0 || monthPermesso > 0) {
     extraInfo = '<div class="tiny muted" style="margin-top: 10px; line-height: 1.5;">';
     if (monthMalattia > 0) extraInfo += `Malattia: ${monthMalattia} giorni. `;
-    if (monthFerie > 0) extraInfo += `Ferie: ${monthFerie} giorni.`;
+    if (monthFerie > 0) extraInfo += `Ferie: ${monthFerie} giorni. `;
+    if (monthPermesso > 0) extraInfo += `Permessi: ${monthPermesso} giorni.`;
     extraInfo += '</div>';
   }
 
   const sabatiTarget = monthSabati === 2 ? '✓' : (monthSabati < 2 ? `mancano ${2-monthSabati}` : `${monthSabati-2} in più`);
   const sabatiChip = monthSabati === 2 ? 'good' : (monthSabati < 2 ? 'warn' : 'bad');
 
+  // Mostro totale combinato (lavoro + assenze equivalenti)
+  const monthCombined = monthTotal + monthEquivTotal;
+  let mainHrsDisplay = fmt.hours(monthCombined);
+  if (monthEquivTotal > 0 && monthTotal > 0) {
+    mainHrsDisplay = `${fmt.hours(monthTotal)} <span class="tiny" style="color: var(--good); font-weight: 500;">+ ${fmt.hours(monthEquivTotal)} eq.</span>`;
+  }
+
   document.getElementById('monthSummaryBody').innerHTML = `
     <div style="margin-bottom: 12px;">
       <div class="label">${monthName.charAt(0).toUpperCase() + monthName.slice(1)}</div>
       <div style="display: flex; justify-content: space-between; align-items: baseline; margin-top: 4px;">
-        <div class="mono" style="font-size: 1.4rem; font-weight: 600;">${fmt.hours(monthTotal)}</div>
+        <div class="mono" style="font-size: 1.4rem; font-weight: 600;">${mainHrsDisplay}</div>
         <span class="chip ${sabatiChip}">Sabati: ${monthSabati}/2 ${sabatiTarget}</span>
       </div>
     </div>
@@ -2717,12 +2883,160 @@ document.getElementById('btnWipe').addEventListener('click', () => {
 });
 
 // ============================================================
+// BACKUP / RESTORE
+// ============================================================
+const BACKUP_VERSION = 2;
+const STORE_LAST_BACKUP = 'cedolino.lastBackup';
+
+function buildBackupObject() {
+  return {
+    app: 'cedolino',
+    version: BACKUP_VERSION,
+    exportedAt: new Date().toISOString(),
+    data: {
+      cfg: cfg,
+      shifts: shifts,
+      buste: buste
+    }
+  };
+}
+
+function updateBackupInfo() {
+  // Mostra info backup nella card
+  const lastBackup = localStorage.getItem(STORE_LAST_BACKUP);
+  const lastEl = document.getElementById('backupLastDate');
+  const infoEl = document.getElementById('backupCurrentInfo');
+  if (!lastEl || !infoEl) return;
+
+  if (lastBackup) {
+    const d = new Date(lastBackup);
+    lastEl.textContent = d.toLocaleDateString('it-IT', {day: 'numeric', month: 'long', year: 'numeric'}) +
+      ' alle ' + d.toLocaleTimeString('it-IT', {hour: '2-digit', minute: '2-digit'});
+  } else {
+    lastEl.textContent = 'mai effettuato';
+  }
+
+  const nTurni = shifts.length;
+  const nLavoro = shifts.filter(s => s.status === 'lavoro').length;
+  const nFerie = shifts.filter(s => s.status === 'ferie').length;
+  const nBuste = buste.length;
+  infoEl.textContent = `${nTurni} giorni registrati (${nLavoro} lavoro, ${nFerie} ferie), ${nBuste} cedolini`;
+}
+
+// EXPORT BACKUP
+document.getElementById('btnBackupExport').addEventListener('click', () => {
+  try {
+    const backup = buildBackupObject();
+    const json = JSON.stringify(backup, null, 2);
+    const blob = new Blob([json], {type: 'application/json'});
+    const url = URL.createObjectURL(blob);
+
+    // Genera nome file con data
+    const now = new Date();
+    const fileName = `cedolino-backup-${now.getFullYear()}${String(now.getMonth()+1).padStart(2,'0')}${String(now.getDate()).padStart(2,'0')}-${String(now.getHours()).padStart(2,'0')}${String(now.getMinutes()).padStart(2,'0')}.json`;
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = fileName;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+
+    // Aggiorna data ultimo backup
+    localStorage.setItem(STORE_LAST_BACKUP, now.toISOString());
+    updateBackupInfo();
+
+    alert('✓ Backup esportato!\n\nSu iPhone: tocca Condividi e scegli dove salvarlo (Note, File, Mail, ecc.).');
+  } catch(err) {
+    alert('Errore durante l\'export: ' + err.message);
+  }
+});
+
+// IMPORT BACKUP
+document.getElementById('btnBackupImport').addEventListener('click', () => {
+  document.getElementById('backupFile').click();
+});
+
+document.getElementById('backupFile').addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    try {
+      const backup = JSON.parse(evt.target.result);
+
+      // Validazione struttura
+      if (!backup || backup.app !== 'cedolino') {
+        alert('⚠ File non valido. Deve essere un backup esportato da Cedolino.');
+        return;
+      }
+      if (!backup.data || typeof backup.data !== 'object') {
+        alert('⚠ Backup corrotto: dati mancanti.');
+        return;
+      }
+
+      // Conferma sovrascrittura
+      const exportDate = backup.exportedAt ? new Date(backup.exportedAt).toLocaleDateString('it-IT') : 'data sconosciuta';
+      const nTurni = (backup.data.shifts || []).length;
+      const nBuste = (backup.data.buste || []).length;
+      const msg = `Importare questo backup?\n\n• Data export: ${exportDate}\n• Turni: ${nTurni}\n• Cedolini: ${nBuste}\n\n⚠ I dati attuali verranno SOVRASCRITTI.`;
+      if (!confirm(msg)) {
+        e.target.value = '';
+        return;
+      }
+
+      // Applica i dati
+      if (backup.data.cfg) {
+        cfg = {...DEFAULT_CFG, ...backup.data.cfg};
+        save(STORE.cfg, cfg);
+      }
+      if (Array.isArray(backup.data.shifts)) {
+        shifts = backup.data.shifts;
+        save(STORE.shifts, shifts);
+      }
+      if (Array.isArray(backup.data.buste)) {
+        buste = backup.data.buste;
+        save(STORE.buste, buste);
+      }
+
+      alert('✓ Backup importato con successo!\n\nL\'app verrà ricaricata per applicare i dati.');
+      location.reload();
+    } catch(err) {
+      alert('⚠ Errore lettura backup:\n' + err.message + '\n\nIl file potrebbe essere corrotto o non valido.');
+    }
+    e.target.value = '';
+  };
+  reader.onerror = () => {
+    alert('⚠ Impossibile leggere il file selezionato.');
+    e.target.value = '';
+  };
+  reader.readAsText(file);
+});
+
+// Backup automatico di sicurezza (in localStorage, slot dedicato)
+function autoBackup() {
+  try {
+    const backup = buildBackupObject();
+    localStorage.setItem('cedolino.autobackup', JSON.stringify(backup));
+  } catch(e) {
+    // localStorage pieno o errore, silenziosamente ignora
+    console.warn('Auto-backup fallito:', e);
+  }
+}
+// Esegue ogni 5 minuti se l'app resta aperta, e all'avvio
+setInterval(autoBackup, 5 * 60 * 1000);
+
+// ============================================================
 // INIT
 // ============================================================
 loadCfgToForm();
 renderDashboard();
 renderWeek();
 renderBuste();
+updateBackupInfo();
+autoBackup(); // backup automatico all'avvio
 
 // Prevent accidental zoom on iOS
 document.addEventListener('gesturestart', e => e.preventDefault());
