@@ -1248,16 +1248,21 @@ function calcMonth(year, month) {
     }
   });
 
-  // Stima lordo del mese (basato sulla retribuzione contrattuale, non sulle ore effettive)
-  // Le ferie/malattia/permesso non si pagano "in più": sono già incluse nella base.
+  // Stima lordo del mese
+  // Logica corretta CCNL:
+  // - Il lordo BASE è quello contrattuale (cfg.lordo) finché lavori secondo il monte ore contrattuale.
+  // - Le ore di ferie/malattia/permesso sono GIÀ INCLUSE nella base contrattuale (non si pagano "in più").
+  // - Ore supplementari (>25h/sett) e straordinarie (>40h/sett) sono pagate IN AGGIUNTA al lordo base.
+  // - Quindi il lordo del mese = base contrattuale + maggiorazioni straordinario/supplementare.
   const paga = cfg.orario;
-  const lordoOrd = ordinarie * paga;
   const lordoSup = supplementari * paga * (1 + cfg.suppl/100);
   const lordoStr = straordinarie * paga * (1 + cfg.stra/100);
+  const lordoOrd = cfg.lordo; // base contrattuale piena
   const lordoCalcolato = lordoOrd + lordoSup + lordoStr;
 
-  // Se non ci sono turni registrati, usa la base contrattuale come stima
-  const lordoBase = (totale === 0) ? cfg.lordo : lordoCalcolato;
+  // Usa la base contrattuale piena come stima del mese
+  // (se hai turni segnati e tutto è regolare, il lordo è cfg.lordo + eventuali extra)
+  const lordoBase = lordoCalcolato;
 
   // Conta giorni per stato (informativi)
   const giorniLavoro = monthShifts.filter(s => s.status === 'lavoro' && shiftHours(s) > 0).length;
@@ -1369,9 +1374,13 @@ function renderDashboard() {
   // Composizione
   const comp = document.getElementById('composizione');
   const rows = [];
-  rows.push(['Retribuzione base', cfg.lordo]);
-  if (m.supplementari > 0) rows.push([`Supplementari (${m.supplementari.toFixed(1)}h × +${cfg.suppl}%)`, m.lordoSup - (m.supplementari * cfg.orario)]);
-  if (m.straordinarie > 0) rows.push([`Straordinario (${m.straordinarie.toFixed(1)}h × +${cfg.stra}%)`, m.lordoStr]);
+  // Etichetta base: chiarisce che include ferie/malattia/permesso (sono già nel lordo CCNL)
+  let baseLabel = 'Retribuzione base';
+  if (m.oreAssenza > 0) baseLabel += ' (incl. ferie/permessi)';
+  rows.push([baseLabel, cfg.lordo]);
+  // Maggiorazioni: solo la PARTE EXTRA (la base oraria delle ore extra è già nella maggiorazione)
+  if (m.supplementari > 0) rows.push([`+ Supplementari (${m.supplementari.toFixed(1)}h × ${cfg.orario.toFixed(2)} +${cfg.suppl}%)`, m.lordoSup]);
+  if (m.straordinarie > 0) rows.push([`+ Straordinario (${m.straordinarie.toFixed(1)}h × ${cfg.orario.toFixed(2)} +${cfg.stra}%)`, m.lordoStr]);
   rows.push(['— INPS ' + cfg.inps + '%', -m.inps]);
   rows.push(['— IRPEF (netto detrazioni)', -m.irpefNetta]);
   if (m.tratt > 0) rows.push(['+ Trattamento integrativo', m.tratt]);
@@ -1400,9 +1409,10 @@ function renderDashboard() {
   } else if (m.supplementari > 0 || m.straordinarie > 0) {
     prom = 'Questo mese hai ore oltre il contratto. Verifica con cura il cedolino — devono comparire voci specifiche per supplementari/straordinari.';
     if (extras.length > 0) prom += ' Inoltre: ' + extras.join(', ') + '.';
+  } else if (extras.length > 0) {
+    prom = 'Le ferie/malattia/permesso sono già retribuite nella base contrattuale CCNL: il lordo del mese non aumenta. Da segnalare: ' + extras.join(', ') + '.';
   } else {
     prom = 'Tutto regolare. A fine mese carica la busta paga nella sezione "Cedolino" per il confronto.';
-    if (extras.length > 0) prom += ' Da segnalare: ' + extras.join(', ') + '.';
   }
   document.getElementById('promemoria').textContent = prom;
 }
