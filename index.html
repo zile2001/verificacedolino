@@ -1205,25 +1205,36 @@ function calcMonth(year, month) {
   const yyyymm = year + '-' + String(month + 1).padStart(2, '0');
   const monthShifts = shifts.filter(s => s.dateKey && s.dateKey.startsWith(yyyymm));
 
-  let totale = 0;
+  let totale = 0;        // monte ore "equivalente" (lavoro + ferie/malattia/permesso)
+  let oreLavoro = 0;     // solo ore di lavoro effettivo (per calcolo lordo)
+  let oreAssenza = 0;    // solo ore di assenze retribuite
   let ordinarie = 0, supplementari = 0, straordinarie = 0;
 
-  // Aggrega ore per settimana (lunedì) per classificare ord/supp/straord
+  // Aggrega ore lavorate per settimana (per classificare ord/supp/straord ai fini retributivi)
   const weekHours = {};
   monthShifts.forEach(sh => {
-    const h = shiftHours(sh);
-    if (h === 0) return;
-    totale += h;
-    const d = new Date(sh.dateKey + 'T00:00:00');
-    const dow = d.getDay(); // 0=dom..6=sab
-    const diff = dow === 0 ? -6 : 1 - dow;
-    const weekStart = new Date(d);
-    weekStart.setDate(d.getDate() + diff);
-    const wk = dateKey(weekStart);
-    weekHours[wk] = (weekHours[wk] || 0) + h;
+    if (sh.status === 'lavoro') {
+      const h = shiftHours(sh);
+      if (h > 0) {
+        oreLavoro += h;
+        const d = new Date(sh.dateKey + 'T00:00:00');
+        const dow = d.getDay();
+        const diff = dow === 0 ? -6 : 1 - dow;
+        const weekStart = new Date(d);
+        weekStart.setDate(d.getDate() + diff);
+        const wk = dateKey(weekStart);
+        weekHours[wk] = (weekHours[wk] || 0) + h;
+      }
+    } else if (['ferie', 'malattia', 'permesso'].includes(sh.status)) {
+      oreAssenza += shiftEquivHours(sh);
+    }
   });
 
-  // Per ogni settimana, classifica ore (PT 25h, FT 40h)
+  // Il totale "equivalente" è la somma di lavoro effettivo + ore assenze retribuite
+  totale = oreLavoro + oreAssenza;
+
+  // Per ogni settimana, classifica ore di lavoro effettivo (PT 25h, FT 40h)
+  // NB: le ore di assenza NON contano per supplementari/straordinario
   Object.values(weekHours).forEach(wkH => {
     if (wkH <= cfg.orePT) {
       ordinarie += wkH;
@@ -1237,7 +1248,8 @@ function calcMonth(year, month) {
     }
   });
 
-  // Stima lordo del mese
+  // Stima lordo del mese (basato sulla retribuzione contrattuale, non sulle ore effettive)
+  // Le ferie/malattia/permesso non si pagano "in più": sono già incluse nella base.
   const paga = cfg.orario;
   const lordoOrd = ordinarie * paga;
   const lordoSup = supplementari * paga * (1 + cfg.suppl/100);
@@ -1317,7 +1329,8 @@ function calcMonth(year, month) {
   const netto = lordoBase - inps - irpefNetta + tratt + sommaIntegrativa - cfg.addiz;
 
   return {
-    totale, ordinarie, supplementari, straordinarie,
+    totale, oreLavoro, oreAssenza,
+    ordinarie, supplementari, straordinarie,
     domenicali: 0, notturne: 0,
     lordoOrd, lordoSup, lordoStr, lordoDom: 0, lordoNot: 0, lordoTot: lordoBase,
     inps, irpefNetta, tratt, sommaIntegrativa, addiz: cfg.addiz, netto,
@@ -1337,10 +1350,16 @@ function renderDashboard() {
   document.getElementById('monthTitle').textContent = monthName.charAt(0).toUpperCase() + monthName.slice(1);
 
   const m = calcMonth(now.getFullYear(), now.getMonth());
-  document.getElementById('monthRange').textContent = `${m.giorniLavoro} giorn${m.giorniLavoro===1?'o':'i'} di lavoro • ${fmt.hours(m.totale)}`;
+  // Riepilogo testuale del mese
+  let summary = `${m.giorniLavoro} giorn${m.giorniLavoro===1?'o':'i'} di lavoro • ${fmt.hours(m.totale)}`;
+  if (m.oreAssenza > 0) {
+    summary = `${m.giorniLavoro} giorn${m.giorniLavoro===1?'o':'i'} lavoro + ${fmt.hours(m.oreAssenza)} assenze retr. • tot. ${fmt.hours(m.totale)}`;
+  }
+  document.getElementById('monthRange').textContent = summary;
 
   document.getElementById('estLordo').innerHTML = fmt.eurBig(m.lordoTot);
   document.getElementById('estNetto').textContent = fmt.eur(m.netto);
+  // Mostro il totale equivalente (lavoro + assenze) come "ore del mese"
   document.getElementById('estOre').textContent = fmt.hours(m.totale);
   document.getElementById('oreOrd').textContent = fmt.hours(m.ordinarie);
   document.getElementById('oreOrdTarget').textContent = `su ${(cfg.orePT * 4.33) | 0}/mese`;
