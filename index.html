@@ -335,6 +335,14 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
 }
 .day-row:active { transform: scale(.98); }
 .day-row.today { border-color: var(--accent); border-width: 1.5px; }
+.day-row.holiday-day .day-marker .dnum { color: var(--accent); }
+.day-row.holiday-day .day-marker::after {
+  content: '🇮🇹';
+  display: block;
+  font-size: .7rem;
+  text-align: center;
+  margin-top: 2px;
+}
 .day-row.pre-contratto { opacity: .45; background: repeating-linear-gradient(135deg, var(--bg-soft), var(--bg-soft) 6px, transparent 6px, transparent 12px); }
 .day-row.pre-contratto .day-marker .dnum { color: var(--ink-soft); }
 .day-row.status-malattia, .day-row.status-ferie, .day-row.status-permesso {
@@ -983,6 +991,18 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
     <h2 id="modalDayTitle">Modifica giorno</h2>
     <div class="muted small" id="modalDaySub" style="margin-bottom: 16px;">—</div>
 
+    <div id="holidayBanner" style="display: none; background: linear-gradient(135deg, #c0392b, #a83232); color: #fdfaf3; padding: 14px; border-radius: 10px; margin-bottom: 16px;">
+      <div style="display: flex; align-items: center; gap: 8px; margin-bottom: 6px;">
+        <span style="font-size: 1.2rem;">🇮🇹</span>
+        <strong id="holidayName" style="font-family: 'Fraunces', serif; font-size: 1.05rem;">Festività</strong>
+      </div>
+      <div style="font-size: .85rem; opacity: .92; margin-bottom: 10px; line-height: 1.4;">Oggi è festa nazionale: l'ufficio è chiuso ma sarai retribuito normalmente. Vuoi impostarlo come Festivo?</div>
+      <div style="display: flex; gap: 8px;">
+        <button id="btnHolidayYes" style="flex:1; background: #fdfaf3; color: #a83232; border: 0; padding: 9px 12px; border-radius: 8px; font-weight: 600; font-size: .85rem; cursor: pointer;">✓ Sì, imposta Festivo</button>
+        <button id="btnHolidayNo" style="flex:1; background: transparent; color: #fdfaf3; border: 1px solid rgba(253,250,243,.4); padding: 9px 12px; border-radius: 8px; font-weight: 500; font-size: .85rem; cursor: pointer;">Scelgo io</button>
+      </div>
+    </div>
+
     <div class="field">
       <label>Stato del giorno</label>
       <div class="status-grid">
@@ -1225,7 +1245,7 @@ function calcMonth(year, month) {
         const wk = dateKey(weekStart);
         weekHours[wk] = (weekHours[wk] || 0) + h;
       }
-    } else if (['ferie', 'malattia', 'permesso'].includes(sh.status)) {
+    } else if (['ferie', 'malattia', 'permesso', 'festivo'].includes(sh.status)) {
       oreAssenza += shiftEquivHours(sh);
     }
   });
@@ -1269,6 +1289,7 @@ function calcMonth(year, month) {
   const giorniMalattia = monthShifts.filter(s => s.status === 'malattia').length;
   const giorniFerie = monthShifts.filter(s => s.status === 'ferie').length;
   const giorniPermesso = monthShifts.filter(s => s.status === 'permesso').length;
+  const giorniFestivo = monthShifts.filter(s => s.status === 'festivo').length;
 
   // Stima netto con formule fiscali corrette
   // Calcolo annualizzato per rispettare le scale IRPEF
@@ -1340,7 +1361,7 @@ function calcMonth(year, month) {
     lordoOrd, lordoSup, lordoStr, lordoDom: 0, lordoNot: 0, lordoTot: lordoBase,
     inps, irpefNetta, tratt, sommaIntegrativa, addiz: cfg.addiz, netto,
     nShifts: giorniLavoro,
-    giorniLavoro, giorniMalattia, giorniFerie, giorniPermesso
+    giorniLavoro, giorniMalattia, giorniFerie, giorniPermesso, giorniFestivo
   };
 }
 
@@ -1403,6 +1424,23 @@ function renderDashboard() {
   if (m.giorniMalattia > 0) extras.push(`${m.giorniMalattia} giorn${m.giorniMalattia===1?'o':'i'} di malattia`);
   if (m.giorniFerie > 0) extras.push(`${m.giorniFerie} giorn${m.giorniFerie===1?'o':'i'} di ferie`);
   if (m.giorniPermesso > 0) extras.push(`${m.giorniPermesso} giorn${m.giorniPermesso===1?'o':'i'} di permesso`);
+  if (m.giorniFestivo > 0) extras.push(`${m.giorniFestivo} festività`);
+
+  // Cerca festività nel mese corrente che non sono state ancora segnate
+  const mesePresente = now.getMonth();
+  const annoPresente = now.getFullYear();
+  const festiviInMese = [];
+  for (let d = 1; d <= 31; d++) {
+    const data = new Date(annoPresente, mesePresente, d);
+    if (data.getMonth() !== mesePresente) break;
+    if (data.getDay() === 0) continue; // domenica non rilevante
+    const k = dateKey(data);
+    const hol = getHoliday(k);
+    if (hol && data >= now) {
+      const giaSegnato = shifts.find(s => s.dateKey === k);
+      if (!giaSegnato) festiviInMese.push({date: data, name: hol.name});
+    }
+  }
 
   if (m.nShifts === 0 && extras.length === 0) {
     prom = 'Nessun turno registrato questo mese. La stima usa la retribuzione base contrattuale. Inizia a pianificare i turni dalla sezione "Turni della settimana".';
@@ -1410,10 +1448,18 @@ function renderDashboard() {
     prom = 'Questo mese hai ore oltre il contratto. Verifica con cura il cedolino — devono comparire voci specifiche per supplementari/straordinari.';
     if (extras.length > 0) prom += ' Inoltre: ' + extras.join(', ') + '.';
   } else if (extras.length > 0) {
-    prom = 'Le ferie/malattia/permesso sono già retribuite nella base contrattuale CCNL: il lordo del mese non aumenta. Da segnalare: ' + extras.join(', ') + '.';
+    prom = 'Le ferie/malattia/permesso/festività sono già retribuite nella base contrattuale CCNL: il lordo del mese non aumenta. Da segnalare: ' + extras.join(', ') + '.';
   } else {
     prom = 'Tutto regolare. A fine mese carica la busta paga nella sezione "Cedolino" per il confronto.';
   }
+
+  // Aggiungi avviso festività imminenti
+  if (festiviInMese.length > 0) {
+    const prox = festiviInMese[0];
+    const giornoStr = prox.date.toLocaleDateString('it-IT', {weekday: 'long', day: 'numeric', month: 'long'});
+    prom += ` 🇮🇹 Prossima festività: ${prox.name} (${giornoStr}) — l'ufficio sarà chiuso ma sarai retribuito normalmente.`;
+  }
+
   document.getElementById('promemoria').textContent = prom;
 }
 
@@ -1422,6 +1468,68 @@ function renderDashboard() {
 // ============================================================
 const DAY_NAMES_SHORT = ['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
 const DAY_NAMES_FULL = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
+
+// ============================================================
+// FESTIVITÀ NAZIONALI ITALIANE + PATRONALE ROMA
+// ============================================================
+// Festività fisse (mese 1-indicizzato, giorno)
+const FIXED_HOLIDAYS = [
+  {month: 1, day: 1, name: 'Capodanno'},
+  {month: 1, day: 6, name: 'Epifania'},
+  {month: 4, day: 25, name: 'Festa della Liberazione'},
+  {month: 5, day: 1, name: 'Festa del Lavoro'},
+  {month: 6, day: 2, name: 'Festa della Repubblica'},
+  {month: 6, day: 29, name: 'San Pietro e Paolo (Roma)'},
+  {month: 8, day: 15, name: 'Ferragosto'},
+  {month: 11, day: 1, name: 'Ognissanti'},
+  {month: 12, day: 8, name: 'Immacolata Concezione'},
+  {month: 12, day: 25, name: 'Natale'},
+  {month: 12, day: 26, name: 'Santo Stefano'}
+];
+
+// Calcolo Pasqua (e Lunedì dell'Angelo) — algoritmo di Gauss
+function calcolaPasqua(year) {
+  const a = year % 19;
+  const b = Math.floor(year / 100);
+  const c = year % 100;
+  const d = Math.floor(b / 4);
+  const e = b % 4;
+  const f = Math.floor((b + 8) / 25);
+  const g = Math.floor((b - f + 1) / 3);
+  const h = (19 * a + b - d - g + 15) % 30;
+  const i = Math.floor(c / 4);
+  const k = c % 4;
+  const l = (32 + 2 * e + 2 * i - h - k) % 7;
+  const m = Math.floor((a + 11 * h + 22 * l) / 451);
+  const month = Math.floor((h + l - 7 * m + 114) / 31);
+  const day = ((h + l - 7 * m + 114) % 31) + 1;
+  return new Date(year, month - 1, day);
+}
+
+// Restituisce info festività per una data, o null se non è festivo
+function getHoliday(dateK) {
+  const d = new Date(dateK + 'T12:00:00');
+  const month = d.getMonth() + 1;
+  const day = d.getDate();
+  const year = d.getFullYear();
+
+  // Festività fisse
+  for (const h of FIXED_HOLIDAYS) {
+    if (h.month === month && h.day === day) return h;
+  }
+  // Lunedì dell'Angelo (Pasquetta)
+  const pasqua = calcolaPasqua(year);
+  const pasquetta = new Date(pasqua);
+  pasquetta.setDate(pasqua.getDate() + 1);
+  if (pasquetta.getMonth() + 1 === month && pasquetta.getDate() === day) {
+    return {month, day, name: 'Lunedì dell\'Angelo'};
+  }
+  return null;
+}
+
+function isHoliday(dateK) {
+  return getHoliday(dateK) !== null;
+}
 
 // Determina su quale settimana posizionarsi all'apertura:
 // - se ci sono turni: la settimana più recente con turni
@@ -1494,15 +1602,13 @@ function shiftHours(s) {
   return Math.max(0, minutes / 60);
 }
 
-// Ore "equivalenti": include lavoro effettivo + ore di assenze retribuite (ferie/malattia/permesso)
+// Ore "equivalenti": include lavoro effettivo + ore di assenze retribuite (ferie/malattia/permesso/festivo)
 // Usate per il monte settimanale e per la base retributiva
 function shiftEquivHours(s) {
   if (!s) return 0;
   if (s.status === 'lavoro') return shiftHours(s);
-  if (['ferie', 'malattia', 'permesso'].includes(s.status)) {
-    // Se oreEquiv è impostato esplicitamente, usalo
+  if (['ferie', 'malattia', 'permesso', 'festivo'].includes(s.status)) {
     if (s.oreEquiv !== undefined && s.oreEquiv !== null) return s.oreEquiv;
-    // Default per turni vecchi senza oreEquiv: 4h (pomeriggio infrasettimanale), 5h se sabato
     if (s.dateKey) {
       const d = new Date(s.dateKey + 'T12:00:00');
       return d.getDay() === 6 ? 5 : 4;
@@ -1595,10 +1701,12 @@ function renderWeek() {
     const sh = getShiftForDate(k);
     const isToday = k === todayKey;
     const isPreContratto = inizioContratto && k < inizioContratto;
+    const holiday = getHoliday(k);
     const status = sh ? sh.status : null;
     const statusClass = status ? `status-${status}` : '';
     const todayClass = isToday ? 'today' : '';
     const preClass = isPreContratto ? 'pre-contratto' : '';
+    const holidayClass = holiday ? 'holiday-day' : '';
 
     let infoHtml = '<div class="empty-day">Tocca per pianificare</div>';
     let hoursHtml = '<span class="muted small">—</span>';
@@ -1617,25 +1725,28 @@ function renderWeek() {
           malattia: 'Malattia',
           ferie: 'Ferie',
           permesso: 'Permesso',
-          festivo: 'Festivo'
+          festivo: holiday ? `🇮🇹 ${holiday.name}` : 'Festivo'
         };
         infoHtml = `<span class="status-badge">${labels[sh.status]}</span>`;
         if (sh.note) infoHtml += `<div class="meta" style="margin-top:4px;">${sh.note}</div>`;
-        // Mostro ore equivalenti per ferie/malattia/permesso (sempre, default da shiftEquivHours)
-        if (['ferie', 'malattia', 'permesso'].includes(sh.status)) {
+        // Mostro ore equivalenti per ferie/malattia/permesso/festivo
+        if (['ferie', 'malattia', 'permesso', 'festivo'].includes(sh.status)) {
           const equiv = shiftEquivHours(sh);
           hoursHtml = `<span class="equiv-hours">${equiv.toFixed(2).replace('.', ',')}h<span class="sub">equiv.</span></span>`;
         } else {
           hoursHtml = `<span class="muted small">—</span>`;
         }
       }
+    } else if (holiday && !isPreContratto) {
+      // Festività nazionale non ancora pianificata
+      infoHtml = `<div class="empty-day" style="color: var(--accent);">🇮🇹 ${holiday.name}</div>`;
     } else if (d.getDay() === 6 && !isPreContratto) {
       // Sabato vuoto → suggerimento (solo se non è pre-contratto)
       infoHtml = '<div class="empty-day">Sabato — tocca per impostare</div>';
     }
 
     return `
-      <div class="day-row ${statusClass} ${todayClass} ${preClass}" data-date="${k}">
+      <div class="day-row ${statusClass} ${todayClass} ${preClass} ${holidayClass}" data-date="${k}">
         <div class="day-marker">
           <div class="dname">${DAY_NAMES_SHORT[d.getDay()]}</div>
           <div class="dnum">${d.getDate()}</div>
@@ -1736,6 +1847,7 @@ function openDayEditor(dateK) {
   editingDate = dateK;
   const d = new Date(dateK + 'T12:00:00'); // mezzogiorno per evitare problemi timezone
   const sh = getShiftForDate(dateK);
+  const holiday = getHoliday(dateK);
 
   document.getElementById('modalDayTitle').textContent = DAY_NAMES_FULL[d.getDay()];
 
@@ -1745,8 +1857,19 @@ function openDayEditor(dateK) {
     subText += ' • ⚠ Prima dell\'inizio contratto';
   } else if (cfg.inizio && dateK === cfg.inizio) {
     subText += ' • 🎉 Primo giorno di lavoro';
+  } else if (holiday) {
+    subText += ' • 🇮🇹 ' + holiday.name;
   }
   document.getElementById('modalDaySub').textContent = subText;
+
+  // Mostra banner festività SOLO se è festivo E non hai già impostato uno stato (nuovo giorno)
+  const banner = document.getElementById('holidayBanner');
+  if (holiday && !sh) {
+    document.getElementById('holidayName').textContent = holiday.name;
+    banner.style.display = 'block';
+  } else {
+    banner.style.display = 'none';
+  }
 
   // Imposta stato
   editingStatus = sh ? sh.status : 'lavoro';
@@ -1814,7 +1937,7 @@ function suggestEquivHours(dateK, dayObj) {
 
 function toggleTimeFields() {
   const isLavoro = editingStatus === 'lavoro';
-  const isAssenza = ['ferie', 'malattia', 'permesso'].includes(editingStatus);
+  const isAssenza = ['ferie', 'malattia', 'permesso', 'festivo'].includes(editingStatus);
   document.getElementById('modalTimeFields').style.display = isLavoro ? 'block' : 'none';
   document.getElementById('modalAbsenceFields').style.display = isAssenza ? 'block' : 'none';
 }
@@ -1926,6 +2049,30 @@ document.getElementById('btnSaveShift').addEventListener('click', () => {
 document.getElementById('btnCloseModal').addEventListener('click', () => {
   document.getElementById('modalShift').classList.remove('show');
   editingDate = null;
+});
+
+// Banner festività: pulsanti Sì/No
+document.getElementById('btnHolidayYes').addEventListener('click', () => {
+  // Imposta stato Festivo
+  editingStatus = 'festivo';
+  document.querySelectorAll('.status-btn').forEach(b => {
+    b.classList.toggle('selected', b.dataset.status === 'festivo');
+  });
+  // Per i festivi infrasettimanali (lun-sab), proponi ore equivalenti
+  const d = new Date(editingDate + 'T12:00:00');
+  const dow = d.getDay();
+  if (dow !== 0) {
+    const eq = suggestEquivHours(editingDate, d);
+    document.getElementById('m-equiv').value = eq;
+    document.getElementById('m-equiv-show').textContent = eq.toFixed(2).replace('.', ',') + ' h equiv.';
+  }
+  toggleTimeFields();
+  document.getElementById('holidayBanner').style.display = 'none';
+});
+
+document.getElementById('btnHolidayNo').addEventListener('click', () => {
+  // L'utente vuole scegliere manualmente
+  document.getElementById('holidayBanner').style.display = 'none';
 });
 
 document.getElementById('btnClearWeek').addEventListener('click', () => {
