@@ -1274,14 +1274,38 @@ function calcMonth(year, month) {
   // - Le ore di ferie/malattia/permesso sono GIÀ INCLUSE nella base contrattuale (non si pagano "in più").
   // - Ore supplementari (>25h/sett) e straordinarie (>40h/sett) sono pagate IN AGGIUNTA al lordo base.
   // - Quindi il lordo del mese = base contrattuale + maggiorazioni straordinario/supplementare.
+  // - Se il mese contiene l'inizio del contratto, riproporziona giorni effettivi/giorni totali.
   const paga = cfg.orario;
   const lordoSup = supplementari * paga * (1 + cfg.suppl/100);
   const lordoStr = straordinarie * paga * (1 + cfg.stra/100);
-  const lordoOrd = cfg.lordo; // base contrattuale piena
+
+  // Calcola fattore di riproporzione se il mese è parziale rispetto all'inizio contratto
+  let fattoreParziale = 1;
+  let giorniEffettivi = null;
+  let giorniTotaliMese = null;
+  let mesePartiale = false;
+  if (cfg.inizio) {
+    const inizioContratto = new Date(cfg.inizio + 'T12:00:00');
+    const inizioMese = new Date(year, month, 1);
+    const fineMese = new Date(year, month + 1, 0);
+    giorniTotaliMese = fineMese.getDate();
+    if (inizioContratto > inizioMese && inizioContratto <= fineMese) {
+      // Il contratto inizia in questo mese
+      mesePartiale = true;
+      giorniEffettivi = giorniTotaliMese - inizioContratto.getDate() + 1;
+      fattoreParziale = giorniEffettivi / giorniTotaliMese;
+    } else if (inizioContratto > fineMese) {
+      // Il contratto inizia dopo questo mese
+      mesePartiale = true;
+      giorniEffettivi = 0;
+      fattoreParziale = 0;
+    }
+  }
+
+  const lordoOrd = cfg.lordo * fattoreParziale;
   const lordoCalcolato = lordoOrd + lordoSup + lordoStr;
 
-  // Usa la base contrattuale piena come stima del mese
-  // (se hai turni segnati e tutto è regolare, il lordo è cfg.lordo + eventuali extra)
+  // Usa la base contrattuale (eventualmente riproporzionata) come stima del mese
   const lordoBase = lordoCalcolato;
 
   // Conta giorni per stato (informativi)
@@ -1293,7 +1317,9 @@ function calcMonth(year, month) {
 
   // Stima netto con formule fiscali corrette
   // Calcolo annualizzato per rispettare le scale IRPEF
-  const lordoAnnuo = lordoBase * cfg.mensilita; // include 13ma e 14ma se previste
+  // IMPORTANTE: il reddito annuo previsto è basato sulla retribuzione PIENA (cfg.lordo),
+  // perché un mese parziale non riduce la RAL annua prevista (gli altri mesi sono pieni).
+  const lordoAnnuo = cfg.lordo * cfg.mensilita; // sempre piena (anche se il mese mostrato è parziale)
   const inpsAnnuo = lordoAnnuo * cfg.inps / 100;
   const imponibileIrpefAnnuo = lordoAnnuo - inpsAnnuo;
 
@@ -1309,10 +1335,6 @@ function calcMonth(year, month) {
   }
 
   // Detrazione lavoro dipendente (formula TUIR aggiornata 2024+)
-  // - fino a 8.500: detrazione fissa 1.955
-  // - 8.500 – 28.000: 1.910 + 1.190 × (28.000 − reddito) / 19.500
-  // - 28.000 – 50.000: 1.910 × (50.000 − reddito) / 22.000
-  // - oltre 50.000: 0
   let detrazioneAnnua = 0;
   if (imponibileIrpefAnnuo <= 8500) {
     detrazioneAnnua = 1955;
@@ -1325,16 +1347,13 @@ function calcMonth(year, month) {
   const irpefNettaAnnua = Math.max(0, irpefLordaAnnua - detrazioneAnnua);
 
   // Trattamento integrativo (ex Bonus Renzi) — richiede capienza fiscale
-  // Per RAL <= 15.000: spetta se IRPEF lorda > (detrazione lavoro dip. − 75€)
   let trattAnnuo = 0;
   const detrazioneRidotta = detrazioneAnnua - 75;
   if (imponibileIrpefAnnuo <= 15000 && irpefLordaAnnua > detrazioneRidotta) {
     trattAnnuo = 1200;
   }
 
-  // Somma integrativa L. 207/2024 (Legge di Bilancio 2025) — NON richiede capienza
-  // Si applica al reddito da lavoro dipendente, esente da tasse e contributi
-  // 7,1% fino a 8.500 | 5,3% tra 8.500 e 15.000 | 4,8% tra 15.000 e 20.000 | 0 oltre
+  // Somma integrativa L. 207/2024 — NON richiede capienza
   let sommaIntegrativaAnnua = 0;
   if (imponibileIrpefAnnuo <= 8500) {
     sommaIntegrativaAnnua = imponibileIrpefAnnuo * 0.071;
@@ -1344,24 +1363,30 @@ function calcMonth(year, month) {
     sommaIntegrativaAnnua = imponibileIrpefAnnuo * 0.048;
   }
 
-  // Ricava i valori mensili (riproporzionati sulle mensilità contrattuali)
-  const inps = inpsAnnuo / cfg.mensilita;
-  const irpefNetta = irpefNettaAnnua / cfg.mensilita;
-  const tratt = trattAnnuo / 12; // trattamento integrativo solo sulle 12 ordinarie
-  const sommaIntegrativa = sommaIntegrativaAnnua / 12; // anche questa solo sulle 12 ordinarie
+  // Valori mensili a regime
+  const inpsMensile = inpsAnnuo / cfg.mensilita;
+  const irpefMensile = irpefNettaAnnua / cfg.mensilita;
+  const trattMensile = trattAnnuo / 12;
+  const sommaIntegrativaMensile = sommaIntegrativaAnnua / 12;
 
-  // Per la composizione mensile mostrata in dashboard, usa solo le 12 mensilità ordinarie
-  // (13ma e 14ma vengono tassate separatamente, senza trattamento integrativo né addizionali)
-  const netto = lordoBase - inps - irpefNetta + tratt + sommaIntegrativa - cfg.addiz;
+  // Se il mese è parziale, applica il fattore anche alle trattenute e ai bonus
+  const inps = inpsMensile * fattoreParziale;
+  const irpefNetta = irpefMensile * fattoreParziale;
+  const tratt = trattMensile * fattoreParziale;
+  const sommaIntegrativa = sommaIntegrativaMensile * fattoreParziale;
+  const addizMensile = cfg.addiz * fattoreParziale;
+
+  const netto = lordoBase - inps - irpefNetta + tratt + sommaIntegrativa - addizMensile;
 
   return {
     totale, oreLavoro, oreAssenza,
     ordinarie, supplementari, straordinarie,
     domenicali: 0, notturne: 0,
     lordoOrd, lordoSup, lordoStr, lordoDom: 0, lordoNot: 0, lordoTot: lordoBase,
-    inps, irpefNetta, tratt, sommaIntegrativa, addiz: cfg.addiz, netto,
+    inps, irpefNetta, tratt, sommaIntegrativa, addiz: addizMensile, netto,
     nShifts: giorniLavoro,
-    giorniLavoro, giorniMalattia, giorniFerie, giorniPermesso, giorniFestivo
+    giorniLavoro, giorniMalattia, giorniFerie, giorniPermesso, giorniFestivo,
+    mesePartiale, giorniEffettivi, giorniTotaliMese, fattoreParziale
   };
 }
 
@@ -1381,6 +1406,9 @@ function renderDashboard() {
   if (m.oreAssenza > 0) {
     summary = `${m.giorniLavoro} giorn${m.giorniLavoro===1?'o':'i'} lavoro + ${fmt.hours(m.oreAssenza)} assenze retr. • tot. ${fmt.hours(m.totale)}`;
   }
+  if (m.mesePartiale && m.giorniEffettivi > 0) {
+    summary += ` • ⚠ Mese parziale (${m.giorniEffettivi}/${m.giorniTotaliMese} gg)`;
+  }
   document.getElementById('monthRange').textContent = summary;
 
   document.getElementById('estLordo').innerHTML = fmt.eurBig(m.lordoTot);
@@ -1398,7 +1426,10 @@ function renderDashboard() {
   // Etichetta base: chiarisce che include ferie/malattia/permesso (sono già nel lordo CCNL)
   let baseLabel = 'Retribuzione base';
   if (m.oreAssenza > 0) baseLabel += ' (incl. ferie/permessi)';
-  rows.push([baseLabel, cfg.lordo]);
+  if (m.mesePartiale && m.giorniEffettivi > 0) {
+    baseLabel += ` (${m.giorniEffettivi}/${m.giorniTotaliMese} gg)`;
+  }
+  rows.push([baseLabel, m.lordoOrd]);
   // Maggiorazioni: solo la PARTE EXTRA (la base oraria delle ore extra è già nella maggiorazione)
   if (m.supplementari > 0) rows.push([`+ Supplementari (${m.supplementari.toFixed(1)}h × ${cfg.orario.toFixed(2)} +${cfg.suppl}%)`, m.lordoSup]);
   if (m.straordinarie > 0) rows.push([`+ Straordinario (${m.straordinarie.toFixed(1)}h × ${cfg.orario.toFixed(2)} +${cfg.stra}%)`, m.lordoStr]);
@@ -1444,6 +1475,9 @@ function renderDashboard() {
 
   if (m.nShifts === 0 && extras.length === 0) {
     prom = 'Nessun turno registrato questo mese. La stima usa la retribuzione base contrattuale. Inizia a pianificare i turni dalla sezione "Turni della settimana".';
+  } else if (m.mesePartiale && m.giorniEffettivi > 0) {
+    prom = `Questo è il primo mese del contratto: lavori solo ${m.giorniEffettivi}/${m.giorniTotaliMese} giorni, quindi il lordo è riproporzionato. Dal mese pieno successivo riceverai la cifra completa.`;
+    if (extras.length > 0) prom += ' Inoltre: ' + extras.join(', ') + '.';
   } else if (m.supplementari > 0 || m.straordinarie > 0) {
     prom = 'Questo mese hai ore oltre il contratto. Verifica con cura il cedolino — devono comparire voci specifiche per supplementari/straordinari.';
     if (extras.length > 0) prom += ' Inoltre: ' + extras.join(', ') + '.';
@@ -1642,7 +1676,7 @@ function renderWeek() {
   document.getElementById('weekLabel').textContent = label;
   document.getElementById('weekRange').textContent = `${fmtD(days[0])} → ${fmtD(lastDay)}`;
 
-  // Calcola ore totali settimana (lavoro + ferie/malattia/permesso equivalenti)
+  // Calcola ore totali settimana (lavoro + ferie/malattia/permesso/festivo equivalenti)
   let totalHours = 0; // ore di lavoro effettivo
   let totalEquiv = 0; // ore di assenze retribuite
   let workedDays = 0;
@@ -1654,7 +1688,7 @@ function renderWeek() {
       totalHours += shiftHours(sh);
       workedDays++;
       if (d.getDay() === 6) hasSabato = true;
-    } else if (['ferie', 'malattia', 'permesso'].includes(sh.status)) {
+    } else if (['ferie', 'malattia', 'permesso', 'festivo'].includes(sh.status)) {
       totalEquiv += shiftEquivHours(sh);
     }
   });
@@ -1687,7 +1721,7 @@ function renderWeek() {
   // Info contestuale (sabato + breakdown ore assenze se presenti)
   let infoText = checkSabatoPattern();
   if (totalEquiv > 0) {
-    const breakdown = `${fmt.hours(totalHours)} lavorate + ${fmt.hours(totalEquiv)} retribuite (ferie/malattia/permesso)`;
+    const breakdown = `${fmt.hours(totalHours)} lavorate + ${fmt.hours(totalEquiv)} retribuite (ferie/festività/permessi)`;
     infoText = breakdown + (infoText ? ' • ' + infoText : '');
   }
   document.getElementById('weekInfo').textContent = infoText;
@@ -2167,6 +2201,8 @@ function renderMonthSummary() {
         wEquiv += shiftEquivHours(sh);
       } else if (sh.status === 'permesso') {
         monthPermesso++;
+        wEquiv += shiftEquivHours(sh);
+      } else if (sh.status === 'festivo') {
         wEquiv += shiftEquivHours(sh);
       }
     }
