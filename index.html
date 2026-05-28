@@ -277,6 +277,24 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
 .rol-card { background: var(--paper); }
 .mensilita-card { background: var(--paper); }
 .mensilita-card .bar-track { background: var(--bg-soft); }
+.clickable { cursor: pointer; transition: transform .12s, box-shadow .12s; -webkit-tap-highlight-color: transparent; }
+.clickable:active { transform: scale(.97); }
+.btn-back {
+  background: transparent;
+  border: 0;
+  color: var(--accent);
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 8px 0;
+  margin-bottom: 8px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: inherit;
+  -webkit-tap-highlight-color: transparent;
+}
+.btn-back:active { opacity: .6; }
 
 .ferie-head { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; margin-bottom: 18px; }
 .ferie-progress-ring { position: relative; width: 80px; height: 80px; }
@@ -554,8 +572,8 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
 
   <div class="grid-2">
     <!-- TREDICESIMA -->
-    <div class="card mensilita-card">
-      <div class="label" style="margin-bottom: 4px;">Tredicesima</div>
+    <div class="card mensilita-card clickable" id="cardTredicesima">
+      <div class="label" style="margin-bottom: 4px;">Tredicesima ›</div>
       <div class="tiny muted" style="margin-bottom: 10px;">arriva a dicembre</div>
       <div class="mono" style="font-size: 1.5rem; font-weight: 700; color: var(--accent); line-height: 1;" id="tredicesimaNetto">€ 0</div>
       <div class="tiny muted" style="margin-top: 2px;">netto stimato</div>
@@ -567,8 +585,8 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
     </div>
 
     <!-- QUATTORDICESIMA -->
-    <div class="card mensilita-card">
-      <div class="label" style="margin-bottom: 4px;">Quattordicesima</div>
+    <div class="card mensilita-card clickable" id="cardQuattordicesima">
+      <div class="label" style="margin-bottom: 4px;">Quattordicesima ›</div>
       <div class="tiny muted" style="margin-bottom: 10px;">arriva a luglio</div>
       <div class="mono" style="font-size: 1.5rem; font-weight: 700; color: var(--accent); line-height: 1;" id="quattordicesimaNetto">€ 0</div>
       <div class="tiny muted" style="margin-top: 2px;">netto stimato</div>
@@ -587,6 +605,45 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
   <div class="card flat" style="background: var(--bg-soft); border: 0;">
     <div class="label">Promemoria</div>
     <p class="small" style="margin-top: 6px; line-height: 1.5;" id="promemoria">Le stime sono indicative. Verifica sempre la busta paga reale tramite la sezione apposita.</p>
+  </div>
+</section>
+
+<!-- DETTAGLIO MENSILITÀ (13ma / 14ma) -->
+<section class="section" id="sec-mensilita-dettaglio">
+  <button class="btn-back" id="btnBackMensilita">‹ Torna a Sintesi</button>
+  <div class="section-head">
+    <h2 id="mensTitle">Tredicesima</h2>
+    <div class="muted small" id="mensSubtitle">—</div>
+  </div>
+
+  <div class="card accent">
+    <div class="label" style="margin-bottom: 8px;">Netto stimato all'arrivo</div>
+    <div class="bignum mono" id="mensNettoBig">€ 0<span class="cents">,00</span></div>
+    <div style="display: flex; justify-content: space-between; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(253,250,243,.2);">
+      <div>
+        <div class="label">Lordo</div>
+        <div class="mono" style="font-size: 1.2rem; font-weight: 600;" id="mensLordoShow">€ 0,00</div>
+      </div>
+      <div style="text-align: right;">
+        <div class="label">Mesi maturati</div>
+        <div class="mono" style="font-size: 1.2rem; font-weight: 600;" id="mensMesiShow">0/12</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom: 12px;">Composizione</h3>
+    <div id="mensComposizione"></div>
+  </div>
+
+  <div class="card">
+    <h3 style="margin-bottom: 10px;">Come funziona</h3>
+    <div id="mensSpiegazione" style="font-size: .9rem; line-height: 1.6;"></div>
+  </div>
+
+  <div class="card flat" style="background: var(--bg-soft); border: 0;">
+    <div class="label" style="margin-bottom: 6px;">Quando arriva</div>
+    <p class="small" style="line-height: 1.6;" id="mensQuando">—</p>
   </div>
 </section>
 
@@ -1253,6 +1310,18 @@ document.getElementById('btnOpenSettings').addEventListener('click', () => {
   window.scrollTo(0, 0);
 });
 
+// Card mensilità → apre dettaglio
+document.getElementById('cardTredicesima').addEventListener('click', () => openMensilitaDettaglio('tredicesima'));
+document.getElementById('cardQuattordicesima').addEventListener('click', () => openMensilitaDettaglio('quattordicesima'));
+
+// Pulsante indietro dal dettaglio mensilità → torna a Sintesi
+document.getElementById('btnBackMensilita').addEventListener('click', () => {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-dashboard').classList.add('active');
+  document.querySelector('nav.tabs button[data-tab="dashboard"]').classList.add('active');
+  window.scrollTo(0, 0);
+});
+
 // ============================================================
 // HOURS CALCULATION
 // ============================================================
@@ -1668,6 +1737,84 @@ function renderMensilitaAggiuntive() {
   nota += `13ª: matura gen-dic, arriva a dicembre ${annoCorrente}. 14ª: matura lug-giu, arriva a luglio ${quattAnnoArrivo}. La regola CCNL conta il mese intero se hai lavorato almeno 15 giorni.`;
   document.getElementById('mensilitaNote').textContent = nota;
 }
+
+// Mostra il dettaglio di una mensilità aggiuntiva (tipo: 'tredicesima' | 'quattordicesima')
+function openMensilitaDettaglio(tipo) {
+  const oggi = new Date();
+  const annoCorrente = oggi.getFullYear();
+
+  let nome, periodoStr, mesi, lordo, calc, quandoStr, periodoMaturazione;
+
+  if (tipo === 'tredicesima') {
+    nome = 'Tredicesima';
+    const inizio = new Date(annoCorrente, 0, 1);
+    const fine = new Date(annoCorrente, 11, 31);
+    mesi = mesiMaturati(inizio, fine);
+    periodoMaturazione = `gennaio – dicembre ${annoCorrente}`;
+    quandoStr = `La tredicesima viene erogata insieme allo stipendio di dicembre ${annoCorrente}, di norma prima delle feste natalizie (tra il 15 e il 24 dicembre). Matura su 12 mesi: ogni mese lavorato (almeno 15 giorni) aggiunge 1/12. Avendo iniziato il 5 maggio ${annoCorrente}, a fine anno avrai maturato 8 mensilità (maggio-dicembre).`;
+  } else {
+    nome = 'Quattordicesima';
+    let inizio, fine, annoArrivo;
+    if (oggi.getMonth() < 6) {
+      inizio = new Date(annoCorrente - 1, 6, 1);
+      fine = new Date(annoCorrente, 5, 30);
+      annoArrivo = annoCorrente;
+    } else {
+      inizio = new Date(annoCorrente, 6, 1);
+      fine = new Date(annoCorrente + 1, 5, 30);
+      annoArrivo = annoCorrente + 1;
+    }
+    mesi = mesiMaturati(inizio, fine);
+    periodoMaturazione = `luglio ${inizio.getFullYear()} – giugno ${fine.getFullYear()}`;
+    quandoStr = `La quattordicesima viene erogata con lo stipendio di luglio ${annoArrivo}. A differenza della tredicesima, il suo periodo di maturazione è "spostato": va da luglio a giugno dell'anno successivo. Per questo la prima quattordicesima (luglio ${annoArrivo}) conterà solo i mesi da quando hai iniziato.`;
+  }
+
+  lordo = cfg.lordo * mesi / 12;
+  calc = nettoMensilitaAggiuntiva(lordo);
+
+  document.getElementById('mensTitle').textContent = nome;
+  document.getElementById('mensSubtitle').textContent = `Maturazione ${periodoMaturazione}`;
+  document.getElementById('mensNettoBig').innerHTML = fmt.eurBig(calc.netto);
+  document.getElementById('mensLordoShow').textContent = fmt.eur(lordo);
+  document.getElementById('mensMesiShow').textContent = `${mesi}/12`;
+
+  // Composizione
+  const rows = [];
+  rows.push([`Rateo lordo (${mesi}/12 di €${cfg.lordo.toFixed(2)})`, lordo]);
+  rows.push([`— INPS ${cfg.inps}%`, -calc.inps]);
+  if (calc.incapiente) {
+    rows.push(['— IRPEF (incapiente)', 0]);
+  } else {
+    rows.push(['— IRPEF', -calc.irpef]);
+  }
+  const compHtml = rows.map(([label, val]) => {
+    const color = val < 0 ? 'color: var(--bad);' : (val === 0 ? 'color: var(--ink-soft);' : '');
+    return `<div class="kv"><span class="k">${label}</span><span class="v mono" style="${color}">${fmt.eur(val)}</span></div>`;
+  }).join('');
+  document.getElementById('mensComposizione').innerHTML = compHtml +
+    `<div class="kv" style="border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; border-bottom: 0;"><span class="k" style="font-weight:700; color: var(--ink);">Netto stimato</span><span class="v mono" style="font-weight:700; color: var(--accent); font-size: 1.1rem;">${fmt.eur(calc.netto)}</span></div>`;
+
+  // Spiegazione
+  let spieg = '';
+  if (tipo === 'tredicesima') {
+    spieg = `<p style="margin-bottom: 10px;">La <strong>tredicesima</strong> (o "gratifica natalizia") è una mensilità aggiuntiva prevista dal CCNL Commercio. Equivale a una retribuzione mensile piena, riproporzionata ai mesi lavorati nell'anno.</p>
+    <p style="margin-bottom: 10px;"><strong>Come matura:</strong> 1/12 per ogni mese di lavoro (con almeno 15 giorni). L'anno di riferimento è solare: gennaio-dicembre.</p>
+    <p><strong>Tassazione:</strong> soggetta a INPS e IRPEF, ma <strong>senza</strong> le detrazioni da lavoro dipendente (che si applicano solo alle 12 mensilità ordinarie), <strong>senza</strong> addizionali regionali/comunali e <strong>senza</strong> bonus. Nel tuo caso, essendo fiscalmente incapiente, l'IRPEF resta a zero anche sulla tredicesima.</p>`;
+  } else {
+    spieg = `<p style="margin-bottom: 10px;">La <strong>quattordicesima</strong> è una seconda mensilità aggiuntiva prevista dal CCNL Commercio, erogata a luglio.</p>
+    <p style="margin-bottom: 10px;"><strong>Periodo particolare:</strong> a differenza della tredicesima, matura da <strong>luglio a giugno</strong> dell'anno successivo. Quindi la quattordicesima di luglio copre i 12 mesi precedenti (lug-giu), non l'anno solare.</p>
+    <p><strong>Tassazione:</strong> identica alla tredicesima — INPS sì, IRPEF senza detrazioni (zero nel tuo caso da incapiente), niente addizionali né bonus.</p>`;
+  }
+  document.getElementById('mensSpiegazione').innerHTML = spieg;
+  document.getElementById('mensQuando').textContent = quandoStr;
+
+  // Mostra la sezione
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-mensilita-dettaglio').classList.add('active');
+  window.scrollTo(0, 0);
+}
+
 const DAY_NAMES_SHORT = ['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
 const DAY_NAMES_FULL = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
 
