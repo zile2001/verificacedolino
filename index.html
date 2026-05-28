@@ -275,6 +275,8 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
 .ferie-card { background: var(--accent); color: #fdfaf3; border-color: var(--accent); }
 .ferie-card .label { color: rgba(253,250,243,.65); }
 .rol-card { background: var(--paper); }
+.mensilita-card { background: var(--paper); }
+.mensilita-card .bar-track { background: var(--bg-soft); }
 
 .ferie-head { display: grid; grid-template-columns: 1fr auto; gap: 14px; align-items: center; margin-bottom: 18px; }
 .ferie-progress-ring { position: relative; width: 80px; height: 80px; }
@@ -542,6 +544,44 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
       <span class="chip accent" id="livelloChip">7° livello</span>
     </div>
     <div id="composizione"></div>
+  </div>
+
+  <!-- MENSILITÀ AGGIUNTIVE: 13ma e 14ma -->
+  <div class="section-head" style="margin-top: 24px;">
+    <h2 style="font-size: 1.2rem;">Mensilità aggiuntive</h2>
+    <div class="muted small">Maturazione 13ª e 14ª — CCNL Commercio</div>
+  </div>
+
+  <div class="grid-2">
+    <!-- TREDICESIMA -->
+    <div class="card mensilita-card">
+      <div class="label" style="margin-bottom: 4px;">Tredicesima</div>
+      <div class="tiny muted" style="margin-bottom: 10px;">arriva a dicembre</div>
+      <div class="mono" style="font-size: 1.5rem; font-weight: 700; color: var(--accent); line-height: 1;" id="tredicesimaNetto">€ 0</div>
+      <div class="tiny muted" style="margin-top: 2px;">netto stimato</div>
+      <div class="tiny" style="margin-top: 4px; color: var(--ink-soft);">lordo <span class="mono" id="tredicesimaLordo">€ 0</span></div>
+      <div style="margin-top: 10px;">
+        <div class="bar-track" style="height: 6px;"><div class="bar-fill" id="tredicesimaBar" style="width: 0%; background: var(--accent);"></div></div>
+        <div class="tiny muted" style="margin-top: 4px;" id="tredicesimaMesi">0/12 mesi</div>
+      </div>
+    </div>
+
+    <!-- QUATTORDICESIMA -->
+    <div class="card mensilita-card">
+      <div class="label" style="margin-bottom: 4px;">Quattordicesima</div>
+      <div class="tiny muted" style="margin-bottom: 10px;">arriva a luglio</div>
+      <div class="mono" style="font-size: 1.5rem; font-weight: 700; color: var(--accent); line-height: 1;" id="quattordicesimaNetto">€ 0</div>
+      <div class="tiny muted" style="margin-top: 2px;">netto stimato</div>
+      <div class="tiny" style="margin-top: 4px; color: var(--ink-soft);">lordo <span class="mono" id="quattordicesimaLordo">€ 0</span></div>
+      <div style="margin-top: 10px;">
+        <div class="bar-track" style="height: 6px;"><div class="bar-fill" id="quattordicesimaBar" style="width: 0%; background: var(--accent);"></div></div>
+        <div class="tiny muted" style="margin-top: 4px;" id="quattordicesimaMesi">0/12 mesi</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card flat" style="background: var(--bg-soft); border: 0; margin-top: 4px;">
+    <p class="tiny muted" style="line-height: 1.5;" id="mensilitaNote">—</p>
   </div>
 
   <div class="card flat" style="background: var(--bg-soft); border: 0;">
@@ -1495,11 +1535,139 @@ function renderDashboard() {
   }
 
   document.getElementById('promemoria').textContent = prom;
+
+  // Aggiorna card 13ma e 14ma
+  renderMensilitaAggiuntive();
 }
 
 // ============================================================
-// WEEK VIEW / SHIFTS
+// TREDICESIMA E QUATTORDICESIMA
 // ============================================================
+// Calcola i mesi maturati per una mensilità aggiuntiva in un dato periodo di competenza
+// inizio/fine periodo (Date), restituisce numero di mesi maturati (con regola dei 15 giorni)
+function mesiMaturati(periodoInizio, periodoFine) {
+  if (!cfg.inizio) return 0;
+  const contrattoInizio = new Date(cfg.inizio + 'T12:00:00');
+  const oggi = new Date();
+
+  let mesi = 0;
+  let cursore = new Date(periodoInizio);
+  while (cursore <= periodoFine) {
+    const annoM = cursore.getFullYear();
+    const meseM = cursore.getMonth();
+    const meseStart = new Date(annoM, meseM, 1);
+    const meseEnd = new Date(annoM, meseM + 1, 0);
+
+    // Il mese conta solo se è già iniziato (non futuro) e se il contratto era attivo
+    if (meseStart <= oggi && meseEnd >= contrattoInizio) {
+      // Giorni di contratto attivi nel mese
+      const dStart = (meseStart < contrattoInizio) ? contrattoInizio : meseStart;
+      const dEnd = (meseEnd > oggi) ? oggi : meseEnd;
+      const giorniAttivi = Math.floor((dEnd - dStart) / (1000*60*60*24)) + 1;
+      // Regola CCNL: matura il rateo se almeno 15 giorni di lavoro nel mese
+      if (giorniAttivi >= 15) mesi += 1;
+    }
+    cursore = new Date(annoM, meseM + 1, 1);
+  }
+  return mesi;
+}
+
+// Stima il netto di una mensilità aggiuntiva (13ma/14ma)
+// La 13ma/14ma è tassata con IRPEF ma SENZA detrazioni lavoro dip., SENZA addizionali,
+// SENZA trattamento integrativo e SENZA somma integrativa.
+function nettoMensilitaAggiuntiva(lordoMensilita) {
+  // INPS a carico dipendente
+  const inps = lordoMensilita * cfg.inps / 100;
+  const imponibile = lordoMensilita - inps;
+
+  // IRPEF: sulle mensilità aggiuntive si applica l'aliquota marginale.
+  // Nel caso di Leonardo, il reddito annuo (~12.200) è nel primo scaglione 23%,
+  // MA è incapiente: le detrazioni annuali coprono già tutta l'IRPEF, comprese
+  // 13ma/14ma. Quindi in pratica l'IRPEF sulle mensilità aggiuntive risulta ~0.
+  // Per coerenza, ricalcoliamo a livello annuo:
+  const lordoAnnuoBase = cfg.lordo * cfg.mensilita;
+  const inpsAnnuo = lordoAnnuoBase * cfg.inps / 100;
+  const imponibileAnnuo = lordoAnnuoBase - inpsAnnuo;
+
+  let irpefLordaAnnua = 0;
+  if (imponibileAnnuo <= 28000) irpefLordaAnnua = imponibileAnnuo * 0.23;
+  else if (imponibileAnnuo <= 50000) irpefLordaAnnua = 28000*0.23 + (imponibileAnnuo-28000)*0.35;
+  else irpefLordaAnnua = 28000*0.23 + 22000*0.35 + (imponibileAnnuo-50000)*0.43;
+
+  let detrazioneAnnua = 0;
+  if (imponibileAnnuo <= 8500) detrazioneAnnua = 1955;
+  else if (imponibileAnnuo <= 28000) detrazioneAnnua = 1910 + 1190*(28000-imponibileAnnuo)/19500;
+  else if (imponibileAnnuo <= 50000) detrazioneAnnua = 1910*(50000-imponibileAnnuo)/22000;
+
+  // Se incapiente (detrazione >= IRPEF lorda), nessuna imposta nemmeno sulle mensilità extra
+  const incapiente = detrazioneAnnua >= irpefLordaAnnua;
+
+  let irpef = 0;
+  if (!incapiente) {
+    // Aliquota marginale applicata all'imponibile della mensilità
+    irpef = imponibile * 0.23; // primo scaglione (semplificazione, valida per redditi < 28k)
+  }
+
+  return {
+    lordo: lordoMensilita,
+    inps: inps,
+    irpef: irpef,
+    netto: lordoMensilita - inps - irpef,
+    incapiente: incapiente
+  };
+}
+
+function renderMensilitaAggiuntive() {
+  const oggi = new Date();
+  const annoCorrente = oggi.getFullYear();
+
+  // --- TREDICESIMA ---
+  // Periodo di maturazione: gennaio-dicembre dello stesso anno
+  // Arriva a dicembre. Matura su 12 mesi (gen-dic).
+  const tredInizio = new Date(annoCorrente, 0, 1);   // 1 gennaio
+  const tredFine = new Date(annoCorrente, 11, 31);    // 31 dicembre
+  const tredMesi = mesiMaturati(tredInizio, tredFine);
+  const tredLordo = cfg.lordo * tredMesi / 12;
+  const tredCalc = nettoMensilitaAggiuntiva(tredLordo);
+
+  document.getElementById('tredicesimaNetto').textContent = fmt.eur(tredCalc.netto);
+  document.getElementById('tredicesimaLordo').textContent = fmt.eur(tredLordo);
+  document.getElementById('tredicesimaBar').style.width = (tredMesi/12*100).toFixed(0) + '%';
+  document.getElementById('tredicesimaMesi').textContent = `${tredMesi}/12 mesi maturati`;
+
+  // --- QUATTORDICESIMA ---
+  // Periodo di maturazione CCNL Commercio: luglio (anno prec.) → giugno (anno corr.)
+  // Arriva a luglio. Se siamo prima di luglio, il periodo è lug(anno-1)→giu(anno).
+  // Se siamo da luglio in poi, il periodo è lug(anno)→giu(anno+1).
+  let quattInizio, quattFine, quattAnnoArrivo;
+  if (oggi.getMonth() < 6) { // prima di luglio (gen-giu)
+    quattInizio = new Date(annoCorrente - 1, 6, 1);  // 1 luglio anno prec
+    quattFine = new Date(annoCorrente, 5, 30);        // 30 giugno anno corr
+    quattAnnoArrivo = annoCorrente;
+  } else { // da luglio in poi
+    quattInizio = new Date(annoCorrente, 6, 1);       // 1 luglio anno corr
+    quattFine = new Date(annoCorrente + 1, 5, 30);    // 30 giugno anno succ
+    quattAnnoArrivo = annoCorrente + 1;
+  }
+  const quattMesi = mesiMaturati(quattInizio, quattFine);
+  const quattLordo = cfg.lordo * quattMesi / 12;
+  const quattCalc = nettoMensilitaAggiuntiva(quattLordo);
+
+  document.getElementById('quattordicesimaNetto').textContent = fmt.eur(quattCalc.netto);
+  document.getElementById('quattordicesimaLordo').textContent = fmt.eur(quattLordo);
+  document.getElementById('quattordicesimaBar').style.width = (quattMesi/12*100).toFixed(0) + '%';
+  document.getElementById('quattordicesimaMesi').textContent = `${quattMesi}/12 mesi maturati`;
+
+  // Nota esplicativa
+  let nota = '';
+  if (tredCalc.incapiente) {
+    nota = `Le mensilità aggiuntive sono soggette a INPS ma non a IRPEF nel tuo caso (sei fiscalmente incapiente). `;
+  } else {
+    nota = `Le mensilità aggiuntive sono tassate con IRPEF ma senza detrazioni, addizionali o bonus. `;
+  }
+  nota += `13ª: matura gen-dic, arriva a dicembre ${annoCorrente}. 14ª: matura lug-giu, arriva a luglio ${quattAnnoArrivo}. La regola CCNL conta il mese intero se hai lavorato almeno 15 giorni.`;
+  document.getElementById('mensilitaNote').textContent = nota;
+}
 const DAY_NAMES_SHORT = ['DOM','LUN','MAR','MER','GIO','VEN','SAB'];
 const DAY_NAMES_FULL = ['Domenica','Lunedì','Martedì','Mercoledì','Giovedì','Venerdì','Sabato'];
 
