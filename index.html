@@ -275,8 +275,31 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
 .ferie-card { background: var(--accent); color: #fdfaf3; border-color: var(--accent); }
 .ferie-card .label { color: rgba(253,250,243,.65); }
 .rol-card { background: var(--paper); }
-.mensilita-card { background: var(--paper); }
+.mensilita-card { background: var(--paper); display: flex; flex-direction: column; }
 .mensilita-card .bar-track { background: var(--bg-soft); }
+.mens-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 4px;
+}
+.mens-header .label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: .62rem;
+  letter-spacing: .06em;
+}
+.mens-arrow {
+  color: var(--accent);
+  font-size: 1.1rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  line-height: 1;
+}
+.mens-when { margin-bottom: 10px; min-height: 1em; }
+.mens-netto { font-size: 1.5rem; font-weight: 700; color: var(--accent); line-height: 1; }
 .clickable { cursor: pointer; transition: transform .12s, box-shadow .12s; -webkit-tap-highlight-color: transparent; }
 .clickable:active { transform: scale(.97); }
 .btn-back {
@@ -573,9 +596,12 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
   <div class="grid-2">
     <!-- TREDICESIMA -->
     <div class="card mensilita-card clickable" id="cardTredicesima">
-      <div class="label" style="margin-bottom: 4px;">Tredicesima ›</div>
-      <div class="tiny muted" style="margin-bottom: 10px;">arriva a dicembre</div>
-      <div class="mono" style="font-size: 1.5rem; font-weight: 700; color: var(--accent); line-height: 1;" id="tredicesimaNetto">€ 0</div>
+      <div class="mens-header">
+        <div class="label">Tredicesima</div>
+        <span class="mens-arrow">›</span>
+      </div>
+      <div class="tiny muted mens-when">arriva a dicembre</div>
+      <div class="mono mens-netto" id="tredicesimaNetto">€ 0</div>
       <div class="tiny muted" style="margin-top: 2px;">netto stimato</div>
       <div class="tiny" style="margin-top: 4px; color: var(--ink-soft);">lordo <span class="mono" id="tredicesimaLordo">€ 0</span></div>
       <div style="margin-top: 10px;">
@@ -586,9 +612,12 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
 
     <!-- QUATTORDICESIMA -->
     <div class="card mensilita-card clickable" id="cardQuattordicesima">
-      <div class="label" style="margin-bottom: 4px;">Quattordicesima ›</div>
-      <div class="tiny muted" style="margin-bottom: 10px;">arriva a luglio</div>
-      <div class="mono" style="font-size: 1.5rem; font-weight: 700; color: var(--accent); line-height: 1;" id="quattordicesimaNetto">€ 0</div>
+      <div class="mens-header">
+        <div class="label">Quattordicesima</div>
+        <span class="mens-arrow">›</span>
+      </div>
+      <div class="tiny muted mens-when">arriva a luglio</div>
+      <div class="mono mens-netto" id="quattordicesimaNetto">€ 0</div>
       <div class="tiny muted" style="margin-top: 2px;">netto stimato</div>
       <div class="tiny" style="margin-top: 4px; color: var(--ink-soft);">lordo <span class="mono" id="quattordicesimaLordo">€ 0</span></div>
       <div style="margin-top: 10px;">
