@@ -276,6 +276,11 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
 .ferie-card .label { color: rgba(253,250,243,.65); }
 .rol-card { background: var(--paper); }
 .mensilita-card { background: var(--paper); display: flex; flex-direction: column; }
+.tfr-card { background: var(--paper); }
+.storico-line { fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+.storico-dot { stroke: var(--paper); stroke-width: 2; }
+.storico-grid { stroke: var(--line-soft); stroke-width: 1; }
+.storico-axis-label { font-size: 10px; fill: var(--ink-soft); font-family: 'IBM Plex Mono', monospace; }
 .mensilita-card .bar-track { background: var(--bg-soft); }
 .mens-header {
   display: flex;
@@ -300,8 +305,8 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
 }
 .mens-when { margin-bottom: 10px; min-height: 1em; }
 .mens-netto { font-size: 1.5rem; font-weight: 700; color: var(--accent); line-height: 1; }
-.clickable { cursor: pointer; transition: transform .12s, box-shadow .12s; -webkit-tap-highlight-color: transparent; }
-.clickable:active { transform: scale(.97); }
+.clickable { cursor: pointer; transition: transform .12s, box-shadow .12s, border-color .12s; -webkit-tap-highlight-color: transparent; }
+.clickable:active { transform: scale(.97); border-color: var(--accent); }
 .btn-back {
   background: transparent;
   border: 0;
@@ -579,12 +584,38 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
     </div>
   </div>
 
+  <!-- RIEPILOGO MESE UNIFICATO -->
+  <div class="card">
+    <h3 style="margin-bottom: 12px;">Riepilogo del mese</h3>
+    <div id="riepilogoMese"></div>
+  </div>
+
   <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 12px;">
       <h3>Composizione lorda</h3>
       <span class="chip accent" id="livelloChip">7° livello</span>
     </div>
     <div id="composizione"></div>
+  </div>
+
+  <!-- TFR -->
+  <div class="card tfr-card clickable" id="cardTfr">
+    <div class="mens-header">
+      <div class="label">TFR accantonato</div>
+      <span class="mens-arrow">›</span>
+    </div>
+    <div class="tiny muted mens-when">trattamento di fine rapporto</div>
+    <div style="display: flex; justify-content: space-between; align-items: flex-end; margin-top: 8px;">
+      <div>
+        <div class="mono" style="font-size: 1.5rem; font-weight: 700; color: var(--accent); line-height: 1;" id="tfrLordo">€ 0</div>
+        <div class="tiny muted" style="margin-top: 2px;">lordo maturato</div>
+      </div>
+      <div style="text-align: right;">
+        <div class="mono" style="font-size: 1.1rem; font-weight: 600;" id="tfrNetto">€ 0</div>
+        <div class="tiny muted" style="margin-top: 2px;">netto stimato</div>
+      </div>
+    </div>
+    <div class="tiny muted" style="margin-top: 10px; line-height: 1.4;" id="tfrInfo">—</div>
   </div>
 
   <!-- MENSILITÀ AGGIUNTIVE: 13ma e 14ma -->
@@ -629,6 +660,29 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
 
   <div class="card flat" style="background: var(--bg-soft); border: 0; margin-top: 4px;">
     <p class="tiny muted" style="line-height: 1.5;" id="mensilitaNote">—</p>
+  </div>
+
+  <!-- STORICO MENSILE CON GRAFICO -->
+  <div class="section-head" style="margin-top: 24px;">
+    <h2 style="font-size: 1.2rem;">Andamento mensile</h2>
+    <div class="muted small">Stima dai turni vs cedolino reale</div>
+  </div>
+
+  <div class="card">
+    <div id="storicoChart" style="width: 100%;"></div>
+    <div id="storicoLegend" style="display: flex; gap: 18px; justify-content: center; margin-top: 12px; flex-wrap: wrap;">
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span style="width: 14px; height: 3px; background: var(--accent); display: inline-block; border-radius: 2px;"></span>
+        <span class="tiny muted">Stima (dai turni)</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 6px;">
+        <span style="width: 14px; height: 3px; background: #d4af56; display: inline-block; border-radius: 2px;"></span>
+        <span class="tiny muted">Cedolino reale</span>
+      </div>
+    </div>
+    <div id="storicoEmpty" class="tiny muted" style="text-align: center; padding: 20px 0; display: none;">
+      Registra i turni e carica i cedolini per vedere l'andamento.
+    </div>
   </div>
 
   <div class="card flat" style="background: var(--bg-soft); border: 0;">
@@ -1342,6 +1396,7 @@ document.getElementById('btnOpenSettings').addEventListener('click', () => {
 // Card mensilità → apre dettaglio
 document.getElementById('cardTredicesima').addEventListener('click', () => openMensilitaDettaglio('tredicesima'));
 document.getElementById('cardQuattordicesima').addEventListener('click', () => openMensilitaDettaglio('quattordicesima'));
+document.getElementById('cardTfr').addEventListener('click', () => openTfrDettaglio());
 
 // Pulsante indietro dal dettaglio mensilità → torna a Sintesi
 document.getElementById('btnBackMensilita').addEventListener('click', () => {
@@ -1636,6 +1691,197 @@ function renderDashboard() {
 
   // Aggiorna card 13ma e 14ma
   renderMensilitaAggiuntive();
+  // Riepilogo unificato del mese
+  renderRiepilogoMese(m);
+  // TFR accantonato
+  renderTFR();
+  // Grafico andamento mensile
+  renderStorico();
+}
+
+// ============================================================
+// RIEPILOGO MESE UNIFICATO
+// ============================================================
+function renderRiepilogoMese(m) {
+  const rows = [];
+  rows.push(['Giorni di lavoro', `${m.giorniLavoro}`]);
+  if (m.oreLavoro !== undefined) rows.push(['Ore lavorate', fmt.hours(m.oreLavoro)]);
+  if (m.oreAssenza > 0) rows.push(['Ore assenze retribuite', fmt.hours(m.oreAssenza)]);
+  rows.push(['Monte ore totale', fmt.hours(m.totale)]);
+  if (m.giorniFerie > 0) rows.push(['Giorni di ferie', `${m.giorniFerie}`]);
+  if (m.giorniPermesso > 0) rows.push(['Giorni di permesso', `${m.giorniPermesso}`]);
+  if (m.giorniMalattia > 0) rows.push(['Giorni di malattia', `${m.giorniMalattia}`]);
+  if (m.giorniFestivo > 0) rows.push(['Festività', `${m.giorniFestivo}`]);
+  if (m.mesePartiale && m.giorniEffettivi > 0) rows.push(['Mese parziale', `${m.giorniEffettivi}/${m.giorniTotaliMese} giorni`]);
+
+  document.getElementById('riepilogoMese').innerHTML = rows.map(([k, v]) =>
+    `<div class="kv"><span class="k">${k}</span><span class="v mono">${v}</span></div>`
+  ).join('');
+}
+
+// ============================================================
+// TFR (Trattamento di Fine Rapporto)
+// ============================================================
+// Il TFR matura ogni anno come: retribuzione annua / 13,5
+// Su base mensile ≈ lordo mensile × mensilità / 12 / 13,5
+// Tassazione TFR: imposta sostitutiva con aliquota media IRPEF (stimata ~23% per redditi bassi,
+// ma con detrazione specifica; per semplicità usiamo l'aliquota del primo scaglione)
+function renderTFR() {
+  if (!cfg.inizio) return;
+  const inizio = new Date(cfg.inizio + 'T12:00:00');
+  const oggi = new Date();
+  if (oggi < inizio) {
+    document.getElementById('tfrLordo').textContent = fmt.eur(0);
+    document.getElementById('tfrNetto').textContent = fmt.eur(0);
+    document.getElementById('tfrInfo').textContent = 'Il contratto non è ancora iniziato.';
+    return;
+  }
+
+  // Mesi di anzianità maturati (con regola dei 15 giorni)
+  let mesiAnzianita = 0;
+  let cursore = new Date(inizio.getFullYear(), inizio.getMonth(), 1);
+  while (cursore <= oggi) {
+    const meseStart = new Date(cursore.getFullYear(), cursore.getMonth(), 1);
+    const meseEnd = new Date(cursore.getFullYear(), cursore.getMonth() + 1, 0);
+    const dStart = (meseStart < inizio) ? inizio : meseStart;
+    const dEnd = (meseEnd > oggi) ? oggi : meseEnd;
+    const giorni = Math.floor((dEnd - dStart) / (1000*60*60*24)) + 1;
+    if (giorni >= 15) mesiAnzianita += 1;
+    else if (giorni > 0) mesiAnzianita += giorni / 30;
+    cursore = new Date(cursore.getFullYear(), cursore.getMonth() + 1, 1);
+  }
+
+  // Retribuzione annua utile TFR = lordo × mensilità (include 13ma/14ma)
+  const retribAnnua = cfg.lordo * cfg.mensilita;
+  // Quota TFR annua = retribuzione / 13,5
+  const tfrAnnuo = retribAnnua / 13.5;
+  // TFR maturato proporzionale ai mesi
+  const tfrLordo = tfrAnnuo * mesiAnzianita / 12;
+
+  // Tassazione TFR: imposta sostitutiva ~ aliquota media. Per redditi bassi ~23%.
+  // Ma c'è una detrazione TFR di €70/anno per redditi fino a certi limiti.
+  // Stima semplificata: netto ≈ lordo × 0,83 (17% di imposta sostitutiva media effettiva)
+  const tfrNetto = tfrLordo * 0.83;
+
+  document.getElementById('tfrLordo').textContent = fmt.eur(tfrLordo);
+  document.getElementById('tfrNetto').textContent = fmt.eur(tfrNetto);
+  document.getElementById('tfrInfo').textContent =
+    `Maturi circa €${(tfrAnnuo/12).toFixed(2).replace('.', ',')}/mese. Il TFR ti viene liquidato alla fine del rapporto di lavoro. La tassazione è separata (imposta sostitutiva), stimata qui al 17%.`;
+}
+
+// ============================================================
+// STORICO MENSILE CON GRAFICO (stima vs reale)
+// ============================================================
+function renderStorico() {
+  // Raccogli dati: per ogni mese da inizio contratto a oggi, calcola la stima.
+  // Per i mesi con cedolino reale salvato, prendi il netto reale.
+  if (!cfg.inizio) return;
+  const inizio = new Date(cfg.inizio + 'T12:00:00');
+  const oggi = new Date();
+
+  const datiStima = [];
+  const datiReale = [];
+  const labels = [];
+
+  let cursore = new Date(inizio.getFullYear(), inizio.getMonth(), 1);
+  while (cursore <= oggi) {
+    const anno = cursore.getFullYear();
+    const mese = cursore.getMonth();
+    const m = calcMonth(anno, mese);
+    const meseKey = anno + '-' + String(mese + 1).padStart(2, '0');
+
+    datiStima.push(m.netto);
+    labels.push(cursore.toLocaleDateString('it-IT', {month: 'short'}));
+
+    // Cerca cedolino reale per questo mese
+    const busta = buste.find(b => b.mese === meseKey);
+    let realeNetto = null;
+    if (busta && busta.data) {
+      // Cerca il netto nell'OCR (può essere in vari campi)
+      realeNetto = busta.data.netto || busta.data.nettoBusta || null;
+    }
+    datiReale.push(realeNetto);
+
+    cursore = new Date(anno, mese + 1, 1);
+  }
+
+  // Se c'è solo 1 mese o nessuno, mostra messaggio
+  if (datiStima.length === 0) {
+    document.getElementById('storicoChart').innerHTML = '';
+    document.getElementById('storicoEmpty').style.display = 'block';
+    document.getElementById('storicoLegend').style.display = 'none';
+    return;
+  }
+  document.getElementById('storicoEmpty').style.display = 'none';
+  document.getElementById('storicoLegend').style.display = 'flex';
+
+  // Disegna il grafico SVG
+  drawStoricoChart(labels, datiStima, datiReale);
+}
+
+function drawStoricoChart(labels, stima, reale) {
+  const W = 320, H = 180;
+  const padL = 44, padR = 12, padT = 16, padB = 28;
+  const plotW = W - padL - padR;
+  const plotH = H - padT - padB;
+
+  // Range valori (considera sia stima che reale)
+  const allVals = [...stima, ...reale.filter(v => v !== null)];
+  let minV = Math.min(...allVals);
+  let maxV = Math.max(...allVals);
+  // Arrotonda il range
+  minV = Math.floor(minV / 100) * 100;
+  maxV = Math.ceil(maxV / 100) * 100;
+  if (maxV === minV) maxV = minV + 100;
+
+  const n = labels.length;
+  const xStep = n > 1 ? plotW / (n - 1) : 0;
+  const xPos = i => padL + (n > 1 ? i * xStep : plotW / 2);
+  const yPos = v => padT + plotH - ((v - minV) / (maxV - minV)) * plotH;
+
+  let svg = `<svg viewBox="0 0 ${W} ${H}" width="100%" style="display:block;">`;
+
+  // Griglia orizzontale (4 linee)
+  for (let g = 0; g <= 4; g++) {
+    const val = minV + (maxV - minV) * g / 4;
+    const y = yPos(val);
+    svg += `<line class="storico-grid" x1="${padL}" y1="${y}" x2="${W-padR}" y2="${y}"/>`;
+    svg += `<text class="storico-axis-label" x="${padL-6}" y="${y+3}" text-anchor="end">${Math.round(val)}</text>`;
+  }
+
+  // Etichette mesi (asse X)
+  labels.forEach((lab, i) => {
+    svg += `<text class="storico-axis-label" x="${xPos(i)}" y="${H-padB+16}" text-anchor="middle">${lab}</text>`;
+  });
+
+  // Linea stima (bordeaux)
+  if (stima.length > 0) {
+    let path = '';
+    stima.forEach((v, i) => {
+      path += (i === 0 ? 'M' : 'L') + xPos(i) + ',' + yPos(v) + ' ';
+    });
+    svg += `<path class="storico-line" d="${path}" stroke="var(--accent)"/>`;
+    // Punti
+    stima.forEach((v, i) => {
+      svg += `<circle class="storico-dot" cx="${xPos(i)}" cy="${yPos(v)}" r="3.5" fill="var(--accent)"/>`;
+    });
+  }
+
+  // Linea reale (oro) - solo punti non-null collegati
+  const realePoints = reale.map((v, i) => ({v, i})).filter(p => p.v !== null);
+  if (realePoints.length > 0) {
+    let path = '';
+    realePoints.forEach((p, idx) => {
+      path += (idx === 0 ? 'M' : 'L') + xPos(p.i) + ',' + yPos(p.v) + ' ';
+    });
+    svg += `<path class="storico-line" d="${path}" stroke="#d4af56"/>`;
+    realePoints.forEach(p => {
+      svg += `<circle class="storico-dot" cx="${xPos(p.i)}" cy="${yPos(p.v)}" r="3.5" fill="#d4af56"/>`;
+    });
+  }
+
+  svg += `</svg>`;
+  document.getElementById('storicoChart').innerHTML = svg;
 }
 
 // ============================================================
@@ -1838,6 +2084,64 @@ function openMensilitaDettaglio(tipo) {
   document.getElementById('mensQuando').textContent = quandoStr;
 
   // Mostra la sezione
+  document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.getElementById('sec-mensilita-dettaglio').classList.add('active');
+  window.scrollTo(0, 0);
+}
+
+function openTfrDettaglio() {
+  if (!cfg.inizio) return;
+  const inizio = new Date(cfg.inizio + 'T12:00:00');
+  const oggi = new Date();
+
+  // Mesi anzianità
+  let mesiAnzianita = 0;
+  let cursore = new Date(inizio.getFullYear(), inizio.getMonth(), 1);
+  while (cursore <= oggi) {
+    const meseStart = new Date(cursore.getFullYear(), cursore.getMonth(), 1);
+    const meseEnd = new Date(cursore.getFullYear(), cursore.getMonth() + 1, 0);
+    const dStart = (meseStart < inizio) ? inizio : meseStart;
+    const dEnd = (meseEnd > oggi) ? oggi : meseEnd;
+    const giorni = Math.floor((dEnd - dStart) / (1000*60*60*24)) + 1;
+    if (giorni >= 15) mesiAnzianita += 1;
+    else if (giorni > 0) mesiAnzianita += giorni / 30;
+    cursore = new Date(cursore.getFullYear(), cursore.getMonth() + 1, 1);
+  }
+
+  const retribAnnua = cfg.lordo * cfg.mensilita;
+  const tfrAnnuo = retribAnnua / 13.5;
+  const tfrLordo = tfrAnnuo * mesiAnzianita / 12;
+  const tfrNetto = tfrLordo * 0.83;
+  const mesiInteri = Math.round(mesiAnzianita);
+
+  document.getElementById('mensTitle').textContent = 'TFR';
+  document.getElementById('mensSubtitle').textContent = 'Trattamento di Fine Rapporto';
+  document.getElementById('mensNettoBig').innerHTML = fmt.eurBig(tfrNetto);
+  document.getElementById('mensLordoShow').textContent = fmt.eur(tfrLordo);
+  document.getElementById('mensMesiShow').textContent = `${mesiInteri} mesi`;
+
+  // Composizione
+  const rows = [
+    [`Quota annua (retrib. ÷ 13,5)`, tfrAnnuo],
+    [`Maturato (${mesiInteri} mesi)`, tfrLordo],
+    [`— Imposta sostitutiva (~17%)`, -(tfrLordo - tfrNetto)]
+  ];
+  const compHtml = rows.map(([label, val]) => {
+    const color = val < 0 ? 'color: var(--bad);' : '';
+    return `<div class="kv"><span class="k">${label}</span><span class="v mono" style="${color}">${fmt.eur(val)}</span></div>`;
+  }).join('');
+  document.getElementById('mensComposizione').innerHTML = compHtml +
+    `<div class="kv" style="border-top: 1px solid var(--line); margin-top: 6px; padding-top: 12px; border-bottom: 0;"><span class="k" style="font-weight:700; color: var(--ink);">Netto stimato</span><span class="v mono" style="font-weight:700; color: var(--accent); font-size: 1.1rem;">${fmt.eur(tfrNetto)}</span></div>`;
+
+  document.getElementById('mensSpiegazione').innerHTML = `
+    <p style="margin-bottom: 10px;">Il <strong>TFR</strong> (Trattamento di Fine Rapporto), detto anche "liquidazione", è una somma che il datore accantona per te ogni anno e ti versa alla <strong>fine del rapporto di lavoro</strong>.</p>
+    <p style="margin-bottom: 10px;"><strong>Come matura:</strong> ogni anno viene accantonata una quota pari alla retribuzione annua divisa per 13,5 (circa una mensilità). Nel tuo caso ≈ €${(tfrAnnuo/12).toFixed(2).replace('.', ',')}/mese.</p>
+    <p style="margin-bottom: 10px;"><strong>Rivalutazione:</strong> il TFR accantonato si rivaluta ogni anno (1,5% fisso + 75% dell'inflazione ISTAT). Questa stima non include la rivalutazione, quindi il valore reale sarà leggermente più alto.</p>
+    <p><strong>Tassazione:</strong> il TFR ha una tassazione separata e agevolata (imposta sostitutiva), diversa dall'IRPEF ordinaria. Qui è stimata al 17%, ma il valore esatto dipende dall'aliquota media dei tuoi redditi.</p>`;
+
+  document.getElementById('mensQuando').textContent = `Il TFR ti viene liquidato quando termina il rapporto di lavoro (dimissioni, licenziamento, fine contratto). Per il tuo apprendistato, se arrivi a fine periodo (maggio 2029), avrai accumulato circa €2.700 lordi (~€2.250 netti). Puoi anche richiedere un anticipo del TFR in casi specifici (acquisto prima casa, spese mediche) dopo 8 anni di servizio.`;
+
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
   document.getElementById('sec-mensilita-dettaglio').classList.add('active');
