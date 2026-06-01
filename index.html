@@ -557,17 +557,26 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
   </div>
 
   <div class="card accent">
-    <div class="label" style="margin-bottom: 8px;">Stipendio stimato lordo</div>
+    <div class="label" style="margin-bottom: 8px;">Stipendio previsto a fine mese</div>
     <div class="bignum mono" id="estLordo">€ 0<span class="cents">,00</span></div>
     <div style="display: flex; justify-content: space-between; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(253,250,243,.2);">
       <div>
-        <div class="label">Netto stimato</div>
+        <div class="label">Netto previsto</div>
         <div class="mono" style="font-size: 1.2rem; font-weight: 600;" id="estNetto">€ 0,00</div>
       </div>
       <div style="text-align: right;">
         <div class="label">Ore lavorate</div>
         <div class="mono" style="font-size: 1.2rem; font-weight: 600;" id="estOre">0,00 h</div>
       </div>
+    </div>
+    <!-- MATURATO FINORA -->
+    <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(253,250,243,.2);">
+      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
+        <span class="label">Maturato finora</span>
+        <span class="mono" style="font-size: 1.05rem; font-weight: 700;" id="estMaturato">€ 0,00</span>
+      </div>
+      <div class="bar-track" style="height: 6px; background: rgba(253,250,243,.25);"><div class="bar-fill" id="estMaturatoBar" style="width: 0%; background: #fdfaf3;"></div></div>
+      <div class="tiny" style="margin-top: 5px; color: rgba(253,250,243,.7);" id="estMaturatoInfo">—</div>
     </div>
   </div>
 
@@ -1612,6 +1621,47 @@ function renderDashboard() {
   document.getElementById('oreOrdTarget').textContent = `su ${(cfg.orePT * 4.33) | 0}/mese`;
   document.getElementById('oreMagg').textContent = fmt.hours(m.supplementari + m.straordinarie);
   document.getElementById('livelloChip').textContent = cfg.livello + '° livello';
+
+  // ===== MATURATO FINORA =====
+  // Proporzionale ai giorni di CALENDARIO trascorsi del mese corrente
+  // (non ai turni inseriti, per evitare cifre fuorvianti a inizio mese)
+  const oggiM = new Date();
+  const annoVis = now.getFullYear();
+  const meseVis = now.getMonth();
+  const giorniTotMese = new Date(annoVis, meseVis + 1, 0).getDate();
+  let giorniTrascorsi;
+  let infoMaturato;
+
+  // Considera l'inizio contratto se cade in questo mese
+  let primoGiornoUtile = 1;
+  if (cfg.inizio) {
+    const inizioC = new Date(cfg.inizio + 'T12:00:00');
+    if (inizioC.getFullYear() === annoVis && inizioC.getMonth() === meseVis) {
+      primoGiornoUtile = inizioC.getDate();
+    }
+  }
+
+  if (oggiM.getFullYear() === annoVis && oggiM.getMonth() === meseVis) {
+    // Mese corrente: conta i giorni da primoGiornoUtile a oggi
+    giorniTrascorsi = Math.max(0, oggiM.getDate() - primoGiornoUtile + 1);
+    const giorniLavorabiliMese = giorniTotMese - primoGiornoUtile + 1;
+    const frazione = giorniLavorabiliMese > 0 ? giorniTrascorsi / giorniLavorabiliMese : 0;
+    const maturato = m.netto * frazione;
+    document.getElementById('estMaturato').textContent = fmt.eur(maturato);
+    document.getElementById('estMaturatoBar').style.width = Math.min(100, frazione * 100).toFixed(0) + '%';
+    infoMaturato = `Giorno ${giorniTrascorsi} di ${giorniLavorabiliMese} · ${(frazione*100).toFixed(0)}% del mese`;
+    document.getElementById('estMaturatoInfo').textContent = infoMaturato;
+  } else if (oggiM < new Date(annoVis, meseVis, 1)) {
+    // Mese futuro: niente maturato
+    document.getElementById('estMaturato').textContent = fmt.eur(0);
+    document.getElementById('estMaturatoBar').style.width = '0%';
+    document.getElementById('estMaturatoInfo').textContent = 'Mese non ancora iniziato';
+  } else {
+    // Mese passato: maturato completo
+    document.getElementById('estMaturato').textContent = fmt.eur(m.netto);
+    document.getElementById('estMaturatoBar').style.width = '100%';
+    document.getElementById('estMaturatoInfo').textContent = 'Mese completato';
+  }
 
   // Composizione
   const comp = document.getElementById('composizione');
