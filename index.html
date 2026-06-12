@@ -1283,13 +1283,19 @@ const DEFAULT_CFG = {
   ccnl: 'Commercio Confcommercio',
   livello: 7,
   orePT: 25,
-  lordo: 870.50,
-  orario: 8.29,
+  lordo: 873.22,
+  orario: 8.29048,
   mensilita: 14,
   inizio: '2026-05-05',
   suppl: 15, stra: 20, dom: 30, nott: 50,
   inps: 5.84, irpef: 23,
-  bonus: 100, addiz: 25
+  bonus: 100, addiz: 25,
+  // Voci fisse dal cedolino reale OSRA (Consorzio Sacoph)
+  fondoEst: 2.00,           // Fondo Est assistenza sanitaria
+  fondoSolidInps: 0.33,     // Fondo solidarietà residuale INPS (%)
+  ctrAssSan: 2.00,          // Contributo assistenza sanitaria dedotto
+  contingenza: 517.51,      // parte del minimo (info)
+  terzoElemento: 2.07       // 3° elemento (info)
 };
 
 let cfg = loadCfg();
@@ -1336,7 +1342,22 @@ function load(key, fallback) {
 function save(key, val) { localStorage.setItem(key, JSON.stringify(val)); }
 function loadCfg() {
   const c = load(STORE.cfg, null);
-  return c ? {...DEFAULT_CFG, ...c} : {...DEFAULT_CFG};
+  if (!c) return {...DEFAULT_CFG};
+  const merged = {...DEFAULT_CFG, ...c};
+  // Migrazione v2: allinea i valori contrattuali al cedolino reale di maggio 2026
+  // (il vecchio default 870.50/8.29 era una stima; il cedolino conferma 873.22/8.29048)
+  if (!c._migratoCedolinoReale) {
+    merged.lordo = 873.22;
+    merged.orario = 8.29048;
+    merged.fondoEst = 2.00;
+    merged.fondoSolidInps = 0.33;
+    merged.ctrAssSan = 2.00;
+    merged.contingenza = 517.51;
+    merged.terzoElemento = 2.07;
+    merged._migratoCedolinoReale = true;
+    save(STORE.cfg, merged);
+  }
+  return merged;
 }
 
 // ============================================================
@@ -1470,18 +1491,25 @@ function calcMonth(year, month) {
     }
   });
 
-  // Stima lordo del mese
-  // Logica corretta CCNL:
-  // - Il lordo BASE è quello contrattuale (cfg.lordo) finché lavori secondo il monte ore contrattuale.
-  // - Le ore di ferie/malattia/permesso sono GIÀ INCLUSE nella base contrattuale (non si pagano "in più").
-  // - Ore supplementari (>25h/sett) e straordinarie (>40h/sett) sono pagate IN AGGIUNTA al lordo base.
-  // - Quindi il lordo del mese = base contrattuale + maggiorazioni straordinario/supplementare.
-  // - Se il mese contiene l'inizio del contratto, riproporziona giorni effettivi/giorni totali.
+  // ============================================================
+  // CALCOLO LORDO — LOGICA A ORE (allineata al cedolino reale OSRA)
+  // ============================================================
+  // Il cedolino del Consorzio Sacoph calcola: ORE LAVORATE × PAGA ORARIA.
+  // Es. maggio: 95 ore × 8,29048 = 787,60 (IMPORTO ORDINARIO).
+  // Le ore di ferie/permesso/malattia/festivo sono retribuite come ore ordinarie
+  // (entrano nel monte ore pagato). Le maggiorazioni (supp/straord) si aggiungono.
   const paga = cfg.orario;
-  const lordoSup = supplementari * paga * (1 + cfg.suppl/100);
-  const lordoStr = straordinarie * paga * (1 + cfg.stra/100);
 
-  // Calcola fattore di riproporzione se il mese è parziale rispetto all'inizio contratto
+  // Ore pagate = ore di lavoro effettivo + ore di assenza retribuita (ferie/malattia/permesso/festivo)
+  // perché nel cedolino anche le assenze retribuite sono pagate come ore ordinarie.
+  const orePagate = oreLavoro + oreAssenza;
+
+  // Maggiorazioni separate (parte EXTRA oltre la paga base, già contata in orePagate)
+  const lordoSup = supplementari * paga * (cfg.suppl/100);
+  const lordoStr = straordinarie * paga * (cfg.stra/100);
+
+  // Riproporzione per mese parziale (informativa, ma con logica a ore il lordo
+  // dipende già dalle ore effettive, quindi il fattore serve solo per le stime a vuoto)
   let fattoreParziale = 1;
   let giorniEffettivi = null;
   let giorniTotaliMese = null;
@@ -1492,23 +1520,30 @@ function calcMonth(year, month) {
     const fineMese = new Date(year, month + 1, 0);
     giorniTotaliMese = fineMese.getDate();
     if (inizioContratto > inizioMese && inizioContratto <= fineMese) {
-      // Il contratto inizia in questo mese
       mesePartiale = true;
       giorniEffettivi = giorniTotaliMese - inizioContratto.getDate() + 1;
       fattoreParziale = giorniEffettivi / giorniTotaliMese;
     } else if (inizioContratto > fineMese) {
-      // Il contratto inizia dopo questo mese
       mesePartiale = true;
       giorniEffettivi = 0;
       fattoreParziale = 0;
     }
   }
 
-  const lordoOrd = cfg.lordo * fattoreParziale;
-  const lordoCalcolato = lordoOrd + lordoSup + lordoStr;
+  // Ore mensili "teoriche" a regime (per stima quando non ci sono turni inseriti)
+  // PT 25h/sett × 4,333 ≈ 108 ore/mese. Il cedolino di un mese pieno userà ~108h.
+  const oreTeoricheMese = cfg.orePT * 4.333;
 
-  // Usa la base contrattuale (eventualmente riproporzionata) come stima del mese
-  const lordoBase = lordoCalcolato;
+  // Se non ci sono turni inseriti, stima sulle ore teoriche (riproporzionate se mese parziale)
+  let oreBaseLordo;
+  if (orePagate > 0) {
+    oreBaseLordo = orePagate;
+  } else {
+    oreBaseLordo = oreTeoricheMese * fattoreParziale;
+  }
+
+  const lordoOrd = oreBaseLordo * paga;
+  const lordoBase = lordoOrd + lordoSup + lordoStr;
 
   // Conta giorni per stato (informativi)
   const giorniLavoro = monthShifts.filter(s => s.status === 'lavoro' && shiftHours(s) > 0).length;
@@ -1517,75 +1552,70 @@ function calcMonth(year, month) {
   const giorniPermesso = monthShifts.filter(s => s.status === 'permesso').length;
   const giorniFestivo = monthShifts.filter(s => s.status === 'festivo').length;
 
-  // Stima netto con formule fiscali corrette
-  // Calcolo annualizzato per rispettare le scale IRPEF
-  // IMPORTANTE: il reddito annuo previsto è basato sulla retribuzione PIENA (cfg.lordo),
-  // perché un mese parziale non riduce la RAL annua prevista (gli altri mesi sono pieni).
-  const lordoAnnuo = cfg.lordo * cfg.mensilita; // sempre piena (anche se il mese mostrato è parziale)
-  const inpsAnnuo = lordoAnnuo * cfg.inps / 100;
-  const imponibileIrpefAnnuo = lordoAnnuo - inpsAnnuo;
+  // ============================================================
+  // CALCOLO NETTO — VOCI REALI DEL CEDOLINO OSRA
+  // ============================================================
+  // Struttura esatta dal cedolino di maggio 2026:
+  //   CONTRIB.FAP 5,84%        → 46,02
+  //   FONDO EST (fisso)        →  2,00
+  //   FONDO SOLID.RES.INPS 0,33% → 2,60
+  //   Ctr.Ass.San. dedotti     → −2,00 (riduce le ritenute sociali)
+  //   = Tot. ritenute sociali  → 48,62
+  //   Imponibile fiscale = Lordo − tot.rit.sociali − Ass.San(2,00) = 736,98
+  //   Netto = Imponibile fiscale − IRPEF netta (0 se incapiente)
+  const fap = lordoBase * cfg.inps / 100;
+  const fondoSolidInps = lordoBase * (cfg.fondoSolidInps || 0.33) / 100;
+  const fondoEst = (cfg.fondoEst || 2.00);
+  const ctrAssSan = (cfg.ctrAssSan || 2.00);
 
-  // IRPEF a scaglioni 2026 (riforma 2024 a 3 scaglioni)
-  // 23% fino a 28.000, 35% fino a 50.000, 43% oltre
+  // Totale ritenute sociali (l'ass. sanitaria dedotta si sottrae qui)
+  const totRitSociali = fap + fondoEst + fondoSolidInps - ctrAssSan;
+  // "inps" mantenuto per compatibilità: rappresenta il totale delle ritenute sociali
+  const inps = totRitSociali;
+
+  // Imponibile fiscale = lordo - ritenute sociali - ass. sanitaria
+  const imponibileFiscaleMese = lordoBase - totRitSociali - ctrAssSan;
+
+  // IRPEF: calcolo annualizzato per le detrazioni (resta incapiente nel caso di Leonardo)
+  const lordoAnnuoStimato = cfg.lordo * cfg.mensilita;
+  const inpsAnnuo = lordoAnnuoStimato * cfg.inps / 100;
+  const imponibileIrpefAnnuo = lordoAnnuoStimato - inpsAnnuo;
+
   let irpefLordaAnnua = 0;
-  if (imponibileIrpefAnnuo <= 28000) {
-    irpefLordaAnnua = imponibileIrpefAnnuo * 0.23;
-  } else if (imponibileIrpefAnnuo <= 50000) {
-    irpefLordaAnnua = 28000 * 0.23 + (imponibileIrpefAnnuo - 28000) * 0.35;
-  } else {
-    irpefLordaAnnua = 28000 * 0.23 + 22000 * 0.35 + (imponibileIrpefAnnuo - 50000) * 0.43;
-  }
+  if (imponibileIrpefAnnuo <= 28000) irpefLordaAnnua = imponibileIrpefAnnuo * 0.23;
+  else if (imponibileIrpefAnnuo <= 50000) irpefLordaAnnua = 28000*0.23 + (imponibileIrpefAnnuo-28000)*0.35;
+  else irpefLordaAnnua = 28000*0.23 + 22000*0.35 + (imponibileIrpefAnnuo-50000)*0.43;
 
-  // Detrazione lavoro dipendente (formula TUIR aggiornata 2024+)
   let detrazioneAnnua = 0;
-  if (imponibileIrpefAnnuo <= 8500) {
-    detrazioneAnnua = 1955;
-  } else if (imponibileIrpefAnnuo <= 28000) {
-    detrazioneAnnua = 1910 + 1190 * (28000 - imponibileIrpefAnnuo) / 19500;
-  } else if (imponibileIrpefAnnuo <= 50000) {
-    detrazioneAnnua = 1910 * (50000 - imponibileIrpefAnnuo) / 22000;
-  }
+  if (imponibileIrpefAnnuo <= 8500) detrazioneAnnua = 1955;
+  else if (imponibileIrpefAnnuo <= 28000) detrazioneAnnua = 1910 + 1190*(28000-imponibileIrpefAnnuo)/19500;
+  else if (imponibileIrpefAnnuo <= 50000) detrazioneAnnua = 1910*(50000-imponibileIrpefAnnuo)/22000;
 
   const irpefNettaAnnua = Math.max(0, irpefLordaAnnua - detrazioneAnnua);
+  const incapiente = detrazioneAnnua >= irpefLordaAnnua;
 
-  // Trattamento integrativo (ex Bonus Renzi) — richiede capienza fiscale
-  let trattAnnuo = 0;
-  const detrazioneRidotta = detrazioneAnnua - 75;
-  if (imponibileIrpefAnnuo <= 15000 && irpefLordaAnnua > detrazioneRidotta) {
-    trattAnnuo = 1200;
+  let irpefNetta = 0;
+  if (!incapiente) {
+    irpefNetta = irpefNettaAnnua / cfg.mensilita;
   }
 
-  // Somma integrativa L. 207/2024 — NON richiede capienza
-  let sommaIntegrativaAnnua = 0;
-  if (imponibileIrpefAnnuo <= 8500) {
-    sommaIntegrativaAnnua = imponibileIrpefAnnuo * 0.071;
-  } else if (imponibileIrpefAnnuo <= 15000) {
-    sommaIntegrativaAnnua = imponibileIrpefAnnuo * 0.053;
-  } else if (imponibileIrpefAnnuo <= 20000) {
-    sommaIntegrativaAnnua = imponibileIrpefAnnuo * 0.048;
-  }
+  // Addizionali: nel cedolino di maggio NON trattenute (conguaglio a fine anno) → 0
+  const addizMensile = 0;
+  // Trattamento/somma integrativa: NON presenti nel cedolino reale → 0
+  const tratt = 0;
+  const sommaIntegrativa = 0;
 
-  // Valori mensili a regime
-  const inpsMensile = inpsAnnuo / cfg.mensilita;
-  const irpefMensile = irpefNettaAnnua / cfg.mensilita;
-  const trattMensile = trattAnnuo / 12;
-  const sommaIntegrativaMensile = sommaIntegrativaAnnua / 12;
-
-  // Se il mese è parziale, applica il fattore anche alle trattenute e ai bonus
-  const inps = inpsMensile * fattoreParziale;
-  const irpefNetta = irpefMensile * fattoreParziale;
-  const tratt = trattMensile * fattoreParziale;
-  const sommaIntegrativa = sommaIntegrativaMensile * fattoreParziale;
-  const addizMensile = cfg.addiz * fattoreParziale;
-
-  const netto = lordoBase - inps - irpefNetta + tratt + sommaIntegrativa - addizMensile;
+  // Netto = lordo - ritenute sociali - ass.san - IRPEF
+  const netto = lordoBase - totRitSociali - ctrAssSan - irpefNetta - addizMensile;
 
   return {
-    totale, oreLavoro, oreAssenza,
+    totale, oreLavoro, oreAssenza, orePagate,
     ordinarie, supplementari, straordinarie,
     domenicali: 0, notturne: 0,
     lordoOrd, lordoSup, lordoStr, lordoDom: 0, lordoNot: 0, lordoTot: lordoBase,
-    inps, irpefNetta, tratt, sommaIntegrativa, addiz: addizMensile, netto,
+    inps, fap, fondoSolidInps, fondoEst, ctrAssSan,
+    irpefNetta, tratt, sommaIntegrativa, addiz: addizMensile, netto,
+    imponibileFiscaleMese, incapiente,
     nShifts: giorniLavoro,
     giorniLavoro, giorniMalattia, giorniFerie, giorniPermesso, giorniFestivo,
     mesePartiale, giorniEffettivi, giorniTotaliMese, fattoreParziale
@@ -1663,24 +1693,29 @@ function renderDashboard() {
     document.getElementById('estMaturatoInfo').textContent = 'Mese completato';
   }
 
-  // Composizione
+  // Composizione (allineata al cedolino reale OSRA)
   const comp = document.getElementById('composizione');
   const rows = [];
-  // Etichetta base: chiarisce che include ferie/malattia/permesso (sono già nel lordo CCNL)
-  let baseLabel = 'Retribuzione base';
-  if (m.oreAssenza > 0) baseLabel += ' (incl. ferie/permessi)';
-  if (m.mesePartiale && m.giorniEffettivi > 0) {
-    baseLabel += ` (${m.giorniEffettivi}/${m.giorniTotaliMese} gg)`;
+  // Importo ordinario = ore pagate × paga oraria
+  let baseLabel = 'Importo ordinario';
+  if (m.orePagate > 0) {
+    baseLabel += ` (${m.orePagate.toFixed(2).replace('.', ',')}h × ${cfg.orario.toFixed(2).replace('.', ',')})`;
+  } else if (m.mesePartiale && m.giorniEffettivi > 0) {
+    baseLabel += ` (stima ${m.giorniEffettivi}/${m.giorniTotaliMese} gg)`;
   }
   rows.push([baseLabel, m.lordoOrd]);
-  // Maggiorazioni: solo la PARTE EXTRA (la base oraria delle ore extra è già nella maggiorazione)
-  if (m.supplementari > 0) rows.push([`+ Supplementari (${m.supplementari.toFixed(1)}h × ${cfg.orario.toFixed(2)} +${cfg.suppl}%)`, m.lordoSup]);
-  if (m.straordinarie > 0) rows.push([`+ Straordinario (${m.straordinarie.toFixed(1)}h × ${cfg.orario.toFixed(2)} +${cfg.stra}%)`, m.lordoStr]);
-  rows.push(['— INPS ' + cfg.inps + '%', -m.inps]);
-  rows.push(['— IRPEF (netto detrazioni)', -m.irpefNetta]);
-  if (m.tratt > 0) rows.push(['+ Trattamento integrativo', m.tratt]);
-  if (m.sommaIntegrativa > 0) rows.push(['+ Somma integrativa L.207/2024', m.sommaIntegrativa]);
-  rows.push(['— Addizionali', -m.addiz]);
+  if (m.supplementari > 0) rows.push([`+ Supplementari (${m.supplementari.toFixed(1)}h +${cfg.suppl}%)`, m.lordoSup]);
+  if (m.straordinarie > 0) rows.push([`+ Straordinario (${m.straordinarie.toFixed(1)}h +${cfg.stra}%)`, m.lordoStr]);
+  rows.push(['— Contrib. FAP ' + cfg.inps + '%', -m.fap]);
+  rows.push(['— Fondo solid. INPS ' + (cfg.fondoSolidInps||0.33) + '%', -m.fondoSolidInps]);
+  rows.push(['— Fondo Est', -m.fondoEst]);
+  rows.push(['— Ctr. assist. sanitaria', -m.ctrAssSan]);
+  if (m.incapiente) {
+    rows.push(['— IRPEF (incapiente)', 0]);
+  } else {
+    rows.push(['— IRPEF (netto detrazioni)', -m.irpefNetta]);
+  }
+  if (m.addiz > 0) rows.push(['— Addizionali', -m.addiz]);
 
   comp.innerHTML = rows.map(([k, v]) => `
     <div class="kv">
@@ -1787,54 +1822,55 @@ function renderTFR() {
     return;
   }
 
-  // Mesi di anzianità maturati (con regola dei 15 giorni)
+  // TFR maturato = somma dei lordi mensili effettivi / 13,5 (come da cedolino reale)
+  // Per ogni mese da inizio contratto a oggi, prende il lordo del mese (dai turni o stima)
+  let tfrBase = 0;
   let mesiAnzianita = 0;
   let cursore = new Date(inizio.getFullYear(), inizio.getMonth(), 1);
   while (cursore <= oggi) {
-    const meseStart = new Date(cursore.getFullYear(), cursore.getMonth(), 1);
+    const m = calcMonth(cursore.getFullYear(), cursore.getMonth());
+    tfrBase += m.lordoTot / 13.5;
     const meseEnd = new Date(cursore.getFullYear(), cursore.getMonth() + 1, 0);
-    const dStart = (meseStart < inizio) ? inizio : meseStart;
+    const dStart = (new Date(cursore.getFullYear(), cursore.getMonth(), 1) < inizio) ? inizio : new Date(cursore.getFullYear(), cursore.getMonth(), 1);
     const dEnd = (meseEnd > oggi) ? oggi : meseEnd;
     const giorni = Math.floor((dEnd - dStart) / (1000*60*60*24)) + 1;
     if (giorni >= 15) mesiAnzianita += 1;
-    else if (giorni > 0) mesiAnzianita += giorni / 30;
     cursore = new Date(cursore.getFullYear(), cursore.getMonth() + 1, 1);
   }
 
-  // Retribuzione annua utile TFR = lordo × mensilità (include 13ma/14ma)
-  const retribAnnua = cfg.lordo * cfg.mensilita;
-  // Quota TFR annua = retribuzione / 13,5
-  const tfrAnnuo = retribAnnua / 13.5;
-
-  // TFR maturato con rivalutazione annua composta
-  // Rivalutazione = 1,5% fisso + 75% inflazione (ipotesi 2% → ~3% annuo)
-  // Si applica allo stock di fine anno precedente
-  const tfrLordo = calcTfrConRivalutazione(mesiAnzianita, tfrAnnuo);
+  // Rivalutazione annua (~3%) applicata allo stock degli anni precedenti
+  const tfrLordo = applicaRivalutazioneTfr(tfrBase, mesiAnzianita);
 
   // Tassazione: imposta sostitutiva. Stima centrale 17%, range 15-19%
   const tfrNetto = tfrLordo * 0.83;
-  const tfrNettoMin = tfrLordo * 0.81; // aliquota 19%
-  const tfrNettoMax = tfrLordo * 0.85; // aliquota 15%
+  const tfrNettoMin = tfrLordo * 0.81;
+  const tfrNettoMax = tfrLordo * 0.85;
 
   document.getElementById('tfrLordo').textContent = fmt.eur(tfrLordo);
-  // Netto con range: valore secco + min-max sotto
   document.getElementById('tfrNetto').innerHTML =
     fmt.eur(tfrNetto) + `<span style="display:block; font-size:.62rem; color: var(--ink-soft); font-weight:400; margin-top:1px;">${fmt.eur(tfrNettoMin)}–${fmt.eur(tfrNettoMax)}</span>`;
   document.getElementById('tfrInfo').textContent =
-    `Maturi circa €${(tfrAnnuo/12).toFixed(2).replace('.', ',')}/mese, con rivalutazione annua (~3%). Il TFR è liquidato a fine rapporto, con tassazione separata (imposta sostitutiva, stimata 15-19%).`;
+    `Accantoni il lordo mensile ÷ 13,5 (≈ €58–66/mese). Il TFR è liquidato a fine rapporto, con tassazione separata (imposta sostitutiva, stimata 15–19%). Rivalutazione annua ~3% inclusa.`;
 }
 
-// Calcola TFR maturato applicando la rivalutazione annua composta
-// mesi = mesi totali di anzianità; quotaAnnua = TFR annuo base
+// Applica la rivalutazione TFR (~3%/anno) allo stock accumulato
+function applicaRivalutazioneTfr(tfrBase, mesi) {
+  if (mesi <= 12) return tfrBase; // primo anno: nessuna rivalutazione ancora
+  const RIVAL = 0.03;
+  const anniCompleti = Math.floor(mesi / 12);
+  // Approssimazione: rivaluta proporzionalmente agli anni trascorsi
+  let fattore = 1;
+  for (let a = 1; a < anniCompleti; a++) fattore += RIVAL * (a / anniCompleti);
+  return tfrBase * fattore;
+}
+
+// Calcola TFR maturato applicando la rivalutazione annua composta (versione per stime annue)
 function calcTfrConRivalutazione(mesi, quotaAnnua) {
-  const RIVAL = 0.03; // 1,5% fisso + 75% di ~2% inflazione ipotizzata
+  const RIVAL = 0.03;
   let stock = 0;
   let mesiRimanenti = mesi;
-  // Accumula anno per anno
   while (mesiRimanenti > 0) {
-    // Rivaluta lo stock esistente (degli anni precedenti)
     stock = stock * (1 + RIVAL);
-    // Aggiungi la quota dell'anno corrente (proporzionale ai mesi di questo anno)
     const mesiQuestoAnno = Math.min(12, mesiRimanenti);
     stock += quotaAnnua * mesiQuestoAnno / 12;
     mesiRimanenti -= mesiQuestoAnno;
@@ -2168,30 +2204,29 @@ function openTfrDettaglio() {
   const inizio = new Date(cfg.inizio + 'T12:00:00');
   const oggi = new Date();
 
-  // Mesi anzianità
+  // TFR = somma lordi mensili / 13,5 (come da cedolino reale)
+  let tfrBase = 0;
   let mesiAnzianita = 0;
   let cursore = new Date(inizio.getFullYear(), inizio.getMonth(), 1);
   while (cursore <= oggi) {
-    const meseStart = new Date(cursore.getFullYear(), cursore.getMonth(), 1);
+    const m = calcMonth(cursore.getFullYear(), cursore.getMonth());
+    tfrBase += m.lordoTot / 13.5;
     const meseEnd = new Date(cursore.getFullYear(), cursore.getMonth() + 1, 0);
-    const dStart = (meseStart < inizio) ? inizio : meseStart;
+    const dStart = (new Date(cursore.getFullYear(), cursore.getMonth(), 1) < inizio) ? inizio : new Date(cursore.getFullYear(), cursore.getMonth(), 1);
     const dEnd = (meseEnd > oggi) ? oggi : meseEnd;
     const giorni = Math.floor((dEnd - dStart) / (1000*60*60*24)) + 1;
     if (giorni >= 15) mesiAnzianita += 1;
-    else if (giorni > 0) mesiAnzianita += giorni / 30;
     cursore = new Date(cursore.getFullYear(), cursore.getMonth() + 1, 1);
   }
 
-  const retribAnnua = cfg.lordo * cfg.mensilita;
-  const tfrAnnuo = retribAnnua / 13.5;
-  const tfrLordo = calcTfrConRivalutazione(mesiAnzianita, tfrAnnuo);
+  const tfrLordo = applicaRivalutazioneTfr(tfrBase, mesiAnzianita);
   const tfrNetto = tfrLordo * 0.83;
   const tfrNettoMin = tfrLordo * 0.81;
   const tfrNettoMax = tfrLordo * 0.85;
   const mesiInteri = Math.round(mesiAnzianita);
-  // Quota lorda senza rivalutazione (per mostrare il contributo della rivalutazione)
-  const tfrSenzaRival = tfrAnnuo * mesiAnzianita / 12;
+  const tfrSenzaRival = tfrBase;
   const rivalutazione = tfrLordo - tfrSenzaRival;
+  const tfrMedioMese = mesiInteri > 0 ? tfrBase / mesiInteri : 0;
 
   document.getElementById('mensTitle').textContent = 'TFR';
   document.getElementById('mensSubtitle').textContent = 'Trattamento di Fine Rapporto';
@@ -2201,7 +2236,7 @@ function openTfrDettaglio() {
 
   // Composizione
   const rows = [
-    [`Quota annua (retrib. ÷ 13,5)`, tfrAnnuo],
+    [`Quota mensile (lordo ÷ 13,5)`, tfrMedioMese],
     [`Accantonato (${mesiInteri} mesi)`, tfrSenzaRival],
     [`+ Rivalutazione (~3%/anno)`, rivalutazione],
     [`= Lordo maturato`, tfrLordo],
@@ -2218,12 +2253,12 @@ function openTfrDettaglio() {
     `<div class="kv" style="border-bottom: 0; padding-top: 2px;"><span class="k tiny">Range (aliquota 15–19%)</span><span class="v mono tiny" style="color: var(--ink-soft);">${fmt.eur(tfrNettoMin)} – ${fmt.eur(tfrNettoMax)}</span></div>`;
 
   document.getElementById('mensSpiegazione').innerHTML = `
-    <p style="margin-bottom: 10px;">Il <strong>TFR</strong> (Trattamento di Fine Rapporto), detto anche "liquidazione", è una somma che il datore accantona per te ogni anno e ti versa alla <strong>fine del rapporto di lavoro</strong>.</p>
-    <p style="margin-bottom: 10px;"><strong>Come matura:</strong> ogni anno viene accantonata una quota pari alla retribuzione annua divisa per 13,5 (circa una mensilità). Nel tuo caso ≈ €${(tfrAnnuo/12).toFixed(2).replace('.', ',')}/mese.</p>
-    <p style="margin-bottom: 10px;"><strong>Rivalutazione:</strong> il TFR già accantonato si rivaluta ogni anno (1,5% fisso + 75% dell'inflazione ISTAT). Questa stima ipotizza ~3%/anno. Il valore reale dipenderà dall'inflazione effettiva.</p>
+    <p style="margin-bottom: 10px;">Il <strong>TFR</strong> (Trattamento di Fine Rapporto), detto anche "liquidazione", è una somma che il datore accantona per te ogni mese e ti versa alla <strong>fine del rapporto di lavoro</strong>.</p>
+    <p style="margin-bottom: 10px;"><strong>Come matura:</strong> ogni mese viene accantonata una quota pari al lordo del mese diviso 13,5. Nel tuo caso ≈ €${tfrMedioMese.toFixed(2).replace('.', ',')}/mese (confermato dal cedolino: €58,34 a maggio).</p>
+    <p style="margin-bottom: 10px;"><strong>Rivalutazione:</strong> il TFR già accantonato si rivaluta ogni anno (1,5% fisso + 75% dell'inflazione ISTAT). Questa stima ipotizza ~3%/anno dal secondo anno in poi.</p>
     <p><strong>Tassazione:</strong> il TFR ha una tassazione separata e agevolata (imposta sostitutiva), diversa dall'IRPEF ordinaria. Qui è stimata tra il 15% e il 19% (valore centrale 17%), ma l'aliquota esatta dipende dalla media dei tuoi redditi.</p>`;
 
-  document.getElementById('mensQuando').textContent = `Il TFR ti viene liquidato quando termina il rapporto di lavoro (dimissioni, licenziamento, fine contratto). Per il tuo apprendistato, se arrivi a fine periodo (maggio 2029), avrai accumulato circa €2.800 lordi (~€2.300 netti, rivalutazione inclusa). Puoi anche richiedere un anticipo del TFR in casi specifici (acquisto prima casa, spese mediche) dopo 8 anni di servizio.`;
+  document.getElementById('mensQuando').textContent = `Il TFR ti viene liquidato quando termina il rapporto di lavoro (dimissioni, licenziamento, fine contratto). Per il tuo apprendistato, se arrivi a fine periodo (maggio 2029), avrai accumulato circa €2.400 lordi (~€2.000 netti, rivalutazione inclusa). Puoi anche richiedere un anticipo del TFR in casi specifici (acquisto prima casa, spese mediche) dopo 8 anni di servizio.`;
 
   document.querySelectorAll('nav.tabs button').forEach(b => b.classList.remove('active'));
   document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
@@ -3243,16 +3278,30 @@ function parsePayslip(text) {
     return null;
   }
 
-  result.lordo = findAmount(['totale.*compet', 'totale.*lordo', 'imponibile.*previd', 'tot.*comp', 'lordo']);
-  result.netto = findAmount(['netto.*pagare', 'netto.*paga', 'totale.*netto', 'netto a pag']);
-  result.inps = findAmount(['inps\\s*5', 'fap', 'contributo.*ivs', 'contr.*previd', 'inps']);
-  result.irpef = findAmount(['irpef.*netta', 'irpef.*sul.*lavor', 'imposta.*netta', 'irpef']);
-  result.trattInt = findAmount(['trattamento.*integ', 'tratt.*integr', 'bonus.*100', 'l.\\s*21/?20', 'integrativo']);
+  // Pattern calibrati sul layout OSRA (Studio Venanzi / Consorzio Sacoph)
+  // Voci esatte: NETTO IN BUSTA, TOTALE COMPETENZE, CONTRIB.FAP, IMPORTO ORDINARIO,
+  //              FONDO EST, FONDO SOLID.RES.INPS, ORE LAV., GG. LAV., PERIODO PAGA
+  result.lordo = findAmount(['totale\\s+competenze', 'tot\\.?\\s*lordo\\s*sogg', 'importo\\s+ordinario', 'totale.*compet', 'lordo']);
+  result.netto = findAmount(['netto\\s+in\\s+busta', 'netto.*busta', 'netto.*pagare', 'netto a pag']);
+  result.inps = findAmount(['contrib\\.?\\s*fap', 'fap\\s*5', 'tot\\.?\\s*rit\\.?\\s*social', 'contr.*previd', 'inps']);
+  result.irpef = findAmount(['rit\\.?\\s*fis\\.?\\s*mese', 'irpef.*netta', 'imposta.*netta', 'irpef']);
+  result.trattInt = findAmount(['trattamento.*integ', 'tratt.*integr', 'bonus.*100', 'l\\.?\\s*21/?20', 'integrativo']);
+  result.sommaInt = findAmount(['somma.*integr', 'l\\.?\\s*207', 'integrativa.*207']);
   result.addiz = findAmount(['addizion', 'add\\.\\s*regional', 'add\\.\\s*comunal']);
-  result.base = findAmount(['paga.*base', 'minimo.*tabel', 'retr.*base']);
-  result.oreLav = findHours(['ore.*ordin', 'ore.*lavorat', 'ore.*mese', 'ore.*comp']);
+  result.fondoEst = findAmount(['fondo\\s+est']);
+  result.tfr = findAmount(['accant\\.?\\s*tfr', 'tfr\\s+al', 'quota\\s+tfr']);
+  result.base = findAmount(['retribuzione\\s+base', 'paga.*base', 'minimo.*tabel', 'retr.*base']);
+  result.oreLav = findHours(['ore\\s+lav', 'importo\\s+ordinario', 'ore.*ordin', 'ore.*lavorat', 'ore.*mese']);
   result.oreSupp = findHours(['ore.*suppl', 'lavoro.*suppl']);
   result.oreStraord = findHours(['ore.*straord', 'straordinari']);
+  result.ggLav = findHours(['gg\\.?\\s*lav', 'giorni\\s+lavorat']);
+  result.periodo = (function() {
+    for (const line of lines) {
+      const m = line.match(/(\d{2})\/(\d{4})\s*[-–]\s*(\w+)/);
+      if (m) return m[0];
+    }
+    return null;
+  })();
 
   return result;
 }
