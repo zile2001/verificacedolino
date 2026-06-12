@@ -850,6 +850,7 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
   </div>
 
   <div id="ocrCompare" style="display:none;">
+    <div class="tiny muted" id="compMeseInfo" style="text-align: center; margin-bottom: 10px; padding: 6px; background: var(--bg-soft); border-radius: 8px;">—</div>
     <div class="card" id="oreVerdict" style="background: var(--bg-soft); border: 0;">
       <div class="label">Verdetto ore</div>
       <div id="oreVerdictBody" style="margin-top: 8px;"></div>
@@ -3337,18 +3338,79 @@ function parsePayslip(text) {
   // Normalizza: rimpiazza virgole con punti, riconosce numeri italiani
   const lines = text.split('\n');
 
-  function findAmount(patterns, context) {
+  // Cerca il valore monetario PIÙ VICINO all'etichetta (entro una finestra di caratteri).
+  // Robusto sia per OCR (righe separate) sia per PDF.js (flusso continuo).
+  function findAmount(patterns, opts) {
+    opts = opts || {};
+    const windowChars = opts.window || 40; // quanti caratteri dopo l'etichetta guardare
+    const fullText = text; // usa tutto il testo come un flusso
     for (const pat of patterns) {
+      // 1) Prova riga per riga (preciso quando l'OCR separa bene)
       const re = new RegExp(pat, 'i');
       for (const line of lines) {
         if (re.test(line)) {
-          // Estrai numeri formato italiano (1.234,56 o 1234,56 o 1234.56)
-          const nums = line.match(/[\d\.]+,\d{2}/g) || line.match(/\d+\.\d{2}/g);
+          const nums = line.match(/\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d+\.\d{2}/g);
           if (nums && nums.length > 0) {
-            // Prendi l'ultimo numero della linea (di solito è quello che ci interessa)
-            const val = nums[nums.length - 1].replace(/\./g, '').replace(',', '.');
-            const parsed = parseFloat(val);
-            if (!isNaN(parsed)) return parsed;
+            // Prendi il PRIMO numero dopo l'etichetta nella riga
+            const idx = line.search(re);
+            const after = line.slice(idx);
+            const afterNums = after.match(/\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d+\.\d{2}/g);
+            const pick = (afterNums && afterNums.length) ? afterNums[0] : nums[0];
+            const val = parseItNum(pick);
+            if (val !== null && (!opts.max || val <= opts.max) && (!opts.min || val >= opts.min)) return val;
+          }
+        }
+      }
+      // 2) Prova sul flusso continuo: numero entro windowChars dopo l'etichetta
+      const reG = new RegExp(pat, 'gi');
+      let mm;
+      while ((mm = reG.exec(fullText)) !== null) {
+        const start = mm.index + mm[0].length;
+        const slice = fullText.slice(start, start + windowChars);
+        const numMatch = slice.match(/\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d+\.\d{2}/);
+        if (numMatch) {
+          const val = parseItNum(numMatch[0]);
+          if (val !== null && (!opts.max || val <= opts.max) && (!opts.min || val >= opts.min)) return val;
+        }
+      }
+    }
+    return null;
+  }
+
+  // Converte numero italiano "1.234,56" o "1234,56" o "1234.56" in float
+  function parseItNum(s) {
+    if (!s) return null;
+    let clean;
+    if (s.includes(',')) {
+      // formato italiano: punto = migliaia, virgola = decimali
+      clean = s.replace(/\./g, '').replace(',', '.');
+    } else {
+      clean = s; // formato con punto decimale
+    }
+    const v = parseFloat(clean);
+    return isNaN(v) ? null : v;
+  }
+
+  // Come findAmount ma prende l'N-esimo numero dopo l'etichetta (1-indexed),
+  // con fallback al primo numero che rispetta i limiti min/max.
+  function findAmountNth(patterns, n, opts) {
+    opts = opts || {};
+    const windowChars = opts.window || 60;
+    for (const pat of patterns) {
+      const reG = new RegExp(pat, 'gi');
+      let mm;
+      while ((mm = reG.exec(text)) !== null) {
+        const start = mm.index + mm[0].length;
+        const slice = text.slice(start, start + windowChars);
+        const nums = slice.match(/\d{1,3}(?:\.\d{3})*,\d{2}|\d+,\d{2}|\d+\.\d{2}/g);
+        if (nums && nums.length >= n) {
+          const val = parseItNum(nums[n - 1]);
+          if (val !== null && (!opts.max || val <= opts.max) && (!opts.min || val >= opts.min)) return val;
+        }
+        if (nums) {
+          for (const num of nums) {
+            const val = parseItNum(num);
+            if (val !== null && (!opts.max || val <= opts.max) && (!opts.min || val >= opts.min)) return val;
           }
         }
       }
@@ -3361,7 +3423,9 @@ function parsePayslip(text) {
       const re = new RegExp(pat, 'i');
       for (const line of lines) {
         if (re.test(line)) {
-          const nums = line.match(/\d+[,.]?\d*/g);
+          const idx = line.search(re);
+          const after = line.slice(idx);
+          const nums = after.match(/\d+[,.]?\d*/g);
           if (nums) {
             for (const n of nums) {
               const v = parseFloat(n.replace(',', '.'));
@@ -3375,27 +3439,42 @@ function parsePayslip(text) {
   }
 
   // Pattern calibrati sul layout OSRA (Studio Venanzi / Consorzio Sacoph)
-  // Voci esatte: NETTO IN BUSTA, TOTALE COMPETENZE, CONTRIB.FAP, IMPORTO ORDINARIO,
-  //              FONDO EST, FONDO SOLID.RES.INPS, ORE LAV., GG. LAV., PERIODO PAGA
-  result.lordo = findAmount(['totale\\s+competenze', 'tot\\.?\\s*lordo\\s*sogg', 'importo\\s+ordinario', 'totale.*compet', 'lordo']);
-  result.netto = findAmount(['netto\\s+in\\s+busta', 'netto.*busta', 'netto.*pagare', 'netto a pag']);
-  result.inps = findAmount(['contrib\\.?\\s*fap', 'fap\\s*5', 'tot\\.?\\s*rit\\.?\\s*social', 'contr.*previd', 'inps']);
-  result.irpef = findAmount(['rit\\.?\\s*fis\\.?\\s*mese', 'irpef.*netta', 'imposta.*netta', 'irpef']);
-  result.trattInt = findAmount(['trattamento.*integ', 'tratt.*integr', 'bonus.*100', 'l\\.?\\s*21/?20', 'integrativo']);
-  result.sommaInt = findAmount(['somma.*integr', 'l\\.?\\s*207', 'integrativa.*207']);
-  result.addiz = findAmount(['addizion', 'add\\.\\s*regional', 'add\\.\\s*comunal']);
-  result.fondoEst = findAmount(['fondo\\s+est']);
-  result.tfr = findAmount(['accant\\.?\\s*tfr', 'tfr\\s+al', 'quota\\s+tfr']);
-  result.base = findAmount(['retribuzione\\s+base', 'paga.*base', 'minimo.*tabel', 'retr.*base']);
-  result.oreLav = findHours(['ore\\s+lav', 'importo\\s+ordinario', 'ore.*ordin', 'ore.*lavorat', 'ore.*mese']);
+  // NETTO IN BUSTA: il valore segue l'etichetta. Max 5000 per escludere "Lire 1.427.031".
+  result.netto = findAmount(['netto\\s+in\\s+busta', 'scatto\\s+maturato', 'netto.*pagare', 'netto a pag'], {window: 60, max: 5000, min: 50});
+  // TOTALE COMPETENZE / IMPORTO ORDINARIO
+  result.lordo = findAmount(['totale\\s+competenze', 'tot\\.?\\s*lordo\\s*sogg', 'importo\\s+ordinario', 'totale.*compet'], {window: 50, max: 5000, min: 50});
+  // FAP: dopo "CONTRIB.FAP 5.84%" ci sono "5,8400 788,00 46,02" → l'importo è l'ultimo.
+  // Cerco il valore della ritenuta saltando aliquota e imponibile. min 10 per evitare il 5,84.
+  result.inps = findAmountNth(['contrib\\.?\\s*fap', 'fap\\s*5'], 3, {window: 60, max: 500, min: 10})
+             || findAmount(['tot\\.?\\s*rit\\.?\\s*social'], {window: 50, max: 500, min: 10});
+  result.irpef = findAmount(['rit\\.?\\s*fis\\.?\\s*mese\\s*lorda', 'irpef.*netta', 'imposta.*netta'], {window: 50, max: 2000});
+  result.trattInt = findAmount(['trattamento.*integ', 'tratt.*integr', 'bonus.*100', 'l\\.?\\s*21/?20'], {window: 50, max: 500});
+  result.sommaInt = findAmount(['somma.*integr', 'l\\.?\\s*207', 'integrativa.*207'], {window: 50, max: 500});
+  result.addiz = findAmount(['addizion', 'add\\.\\s*regional', 'add\\.\\s*comunal'], {window: 50, max: 500});
+  result.fondoEst = findAmount(['fondo\\s+est'], {window: 30, max: 100});
+  result.tfr = findAmount(['accant\\.?\\s*tfr', 'tfr\\s+al\\s+\\d', 'quota\\s+tfr'], {window: 80, max: 1000, min: 1});
+  // GG lavorati: nel periodo "MM/AAAA - NomeMese 95,00 23 23" i giorni seguono le ore
+  result.ggLav = (function() {
+    const m = text.match(/\d{2}\/\d{4}\s*[-–]\s*\w+\s+\d+[,.]\d{2}\s+(\d{1,2})/i);
+    if (m) { const v = parseInt(m[1], 10); if (v > 0 && v <= 31) return v; }
+    return findHours(['gg\\.?\\s*lav', 'giorni\\s+lavorat']);
+  })();
+  result.base = findAmount(['retribuzione\\s+base', 'paga.*base', 'minimo.*tabel', 'retr.*base'], {window: 50, max: 5000});
+  // Ore lavorate: nel layout OSRA "ORE LAV." precede il numero, oppure "IMPORTO ORDINARIO 95,00"
+  result.oreLav = findHours(['ore\\s*lav\\.?', 'importo\\s+ordinario', 'ore.*ordin', 'ore.*lavorat'])
+               || (function(){
+                    // Fallback: dopo "MM/AAAA - NomeMese" segue il numero di ore
+                    const m = text.match(/\d{2}\/\d{4}\s*[-–]\s*\w+\s+(\d+[,.]\d{2})/i);
+                    if (m) { const v = parseFloat(m[1].replace(',', '.')); if (!isNaN(v) && v < 300) return v; }
+                    return null;
+                  })();
   result.oreSupp = findHours(['ore.*suppl', 'lavoro.*suppl']);
   result.oreStraord = findHours(['ore.*straord', 'straordinari']);
-  result.ggLav = findHours(['gg\\.?\\s*lav', 'giorni\\s+lavorat']);
   result.periodo = (function() {
-    for (const line of lines) {
-      const m = line.match(/(\d{2})\/(\d{4})\s*[-–]\s*(\w+)/);
-      if (m) return m[0];
-    }
+    const m = text.match(/(\d{2})\/(\d{4})\s*[-–]\s*(\w+)/);
+    if (m) return m[0];
+    const m2 = text.match(/\b(0[1-9]|1[0-2])\/(\d{4})\b/);
+    if (m2) return m2[0];
     return null;
   })();
 
@@ -3439,9 +3518,55 @@ document.getElementById('btnShowRaw').addEventListener('click', () => {
   raw.style.display = raw.style.display === 'none' ? 'block' : 'none';
 });
 
+// Estrae anno e mese (0-indexed) dal periodo del cedolino
+// Riconosce formati come "05/2026 - Maggio", "05/2026", "Maggio 2026"
+function parsePeriodoCedolino(testo) {
+  if (!testo) return null;
+  const mesiIt = ['gennaio','febbraio','marzo','aprile','maggio','giugno','luglio','agosto','settembre','ottobre','novembre','dicembre'];
+
+  // Formato MM/AAAA
+  let m = testo.match(/\b(0[1-9]|1[0-2])\/(\d{4})\b/);
+  if (m) {
+    return {mese: parseInt(m[1], 10) - 1, anno: parseInt(m[2], 10)};
+  }
+  // Formato "NomeMese AAAA"
+  const testoLower = testo.toLowerCase();
+  for (let i = 0; i < mesiIt.length; i++) {
+    const re = new RegExp(mesiIt[i] + '\\s+(\\d{4})', 'i');
+    const mm = testoLower.match(re);
+    if (mm) return {mese: i, anno: parseInt(mm[1], 10)};
+  }
+  // Solo nome mese (usa anno corrente)
+  for (let i = 0; i < mesiIt.length; i++) {
+    if (testoLower.includes(mesiIt[i])) {
+      return {mese: i, anno: new Date().getFullYear()};
+    }
+  }
+  return null;
+}
+
 function renderCompare() {
-  const now = new Date();
-  const m = calcMonth(now.getFullYear(), now.getMonth());
+  // Determina il mese di COMPETENZA del cedolino (non il mese corrente!)
+  // Il cedolino ha un periodo tipo "05/2026 - Maggio": confrontiamo con i turni di QUEL mese.
+  let annoComp, meseComp;
+  const periodo = parsePeriodoCedolino(currentOcr.periodo || currentOcr.rawText);
+  if (periodo) {
+    annoComp = periodo.anno;
+    meseComp = periodo.mese; // 0-indexed
+  } else {
+    // Fallback: mese corrente
+    const now = new Date();
+    annoComp = now.getFullYear();
+    meseComp = now.getMonth();
+  }
+  const m = calcMonth(annoComp, meseComp);
+  currentOcr._annoComp = annoComp;
+  currentOcr._meseComp = meseComp;
+
+  // Mostra quale mese si sta confrontando
+  const meseNome = new Date(annoComp, meseComp, 1).toLocaleDateString('it-IT', {month: 'long', year: 'numeric'});
+  const compTitle = document.getElementById('compMeseInfo');
+  if (compTitle) compTitle.textContent = `Confronto sul mese di competenza: ${meseNome}`;
 
   // Verdetto ore esplicito
   const verdictBody = document.getElementById('oreVerdictBody');
