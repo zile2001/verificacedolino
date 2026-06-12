@@ -816,11 +816,13 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
         <button class="btn primary" id="btnTakePhoto">📷 Scatta foto</button>
         <button class="btn ghost" id="btnPickFile">🖼️ Galleria</button>
       </div>
+      <button class="btn ghost" id="btnPickPdf" style="margin-bottom: 10px;">📄 Carica PDF</button>
       <button class="btn ghost sm" id="btnManualEntry" style="margin-bottom: 10px;">✎ Inserisci manualmente (senza foto)</button>
-      <div class="tiny muted" style="text-align: center;">JPG, PNG • elaborazione locale, nulla viene caricato online</div>
+      <div class="tiny muted" style="text-align: center;">JPG, PNG, PDF • elaborazione locale, nulla viene caricato online</div>
 
       <input type="file" id="ocrFileCamera" accept="image/*" capture="environment" style="display:none;">
       <input type="file" id="ocrFileGallery" accept="image/*" style="display:none;">
+      <input type="file" id="ocrFilePdf" accept="application/pdf,.pdf" style="display:none;">
     </div>
 
     <div id="ocrPreview" style="display:none;">
@@ -1267,6 +1269,7 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
 
 <!-- OCR library -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.1.1/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 
 <script>
 // ============================================================
@@ -3133,6 +3136,99 @@ ocrFileGallery.addEventListener('change', (e) => {
   handleFileSelected(e.target.files[0]);
   e.target.value = '';
 });
+document.getElementById('btnPickPdf').addEventListener('click', () => {
+  document.getElementById('ocrFilePdf').click();
+});
+document.getElementById('ocrFilePdf').addEventListener('change', (e) => {
+  handlePdfSelected(e.target.files[0]);
+  e.target.value = '';
+});
+
+// Gestione PDF: estrae il testo direttamente (PDF testuali come quelli OSRA)
+// oppure rasterizza la pagina e usa l'OCR (PDF scansionati)
+async function handlePdfSelected(file) {
+  if (!file) return;
+  if (file.type !== 'application/pdf' && !file.name.toLowerCase().endsWith('.pdf')) {
+    showOcrError('Il file selezionato non è un PDF.');
+    return;
+  }
+  if (file.size > 20 * 1024 * 1024) {
+    showOcrError('PDF troppo grande (max 20 MB).');
+    return;
+  }
+
+  // Mostra preview "PDF" e avvia elaborazione
+  document.getElementById('ocrUpload').style.display = 'none';
+  document.getElementById('ocrPreview').style.display = 'block';
+  document.getElementById('ocrError').style.display = 'none';
+  // Placeholder immagine: icona PDF
+  document.getElementById('ocrPreviewImg').src = 'data:image/svg+xml,' + encodeURIComponent(
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 120"><rect width="200" height="120" fill="#2a2522"/><text x="100" y="55" font-family="serif" font-size="22" fill="#d4af56" text-anchor="middle">📄 PDF</text><text x="100" y="82" font-family="sans-serif" font-size="11" fill="#9a8" text-anchor="middle">${file.name.slice(0,28)}</text></svg>`
+  );
+
+  document.getElementById('ocrResult').style.display = 'block';
+  document.getElementById('ocrBar').style.width = '10%';
+  document.getElementById('ocrPercent').textContent = '10%';
+  document.getElementById('ocrStatus').textContent = 'Lettura PDF…';
+
+  try {
+    if (typeof pdfjsLib === 'undefined' && typeof window.pdfjsLib === 'undefined') {
+      throw new Error('Libreria PDF non caricata. Controlla la connessione e ricarica.');
+    }
+    const pdfjs = window.pdfjsLib || pdfjsLib;
+    pdfjs.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+    const arrayBuffer = await file.arrayBuffer();
+    const pdf = await pdfjs.getDocument({data: arrayBuffer}).promise;
+
+    document.getElementById('ocrBar').style.width = '40%';
+    document.getElementById('ocrPercent').textContent = '40%';
+    document.getElementById('ocrStatus').textContent = 'Estrazione testo…';
+
+    // Estrai testo da tutte le pagine
+    let fullText = '';
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const content = await page.getTextContent();
+      const pageText = content.items.map(it => it.str).join(' ');
+      fullText += pageText + '\n';
+    }
+
+    document.getElementById('ocrBar').style.width = '80%';
+    document.getElementById('ocrPercent').textContent = '80%';
+
+    if (fullText.trim().length < 20) {
+      // PDF probabilmente scansionato (solo immagine): fallback su OCR della prima pagina
+      document.getElementById('ocrStatus').textContent = 'PDF scansionato, uso OCR…';
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({scale: 2});
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width;
+      canvas.height = viewport.height;
+      await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+      const blob = await new Promise(res => canvas.toBlob(res, 'image/png'));
+      await runOcr(blob);
+      return;
+    }
+
+    // PDF testuale: parsing diretto
+    document.getElementById('ocrBar').style.width = '100%';
+    document.getElementById('ocrPercent').textContent = '100%';
+    document.getElementById('ocrStatus').textContent = 'Completato';
+
+    currentOcr = parsePayslip(fullText);
+    currentOcr.rawText = fullText;
+    currentOcr.timestamp = Date.now();
+
+    document.getElementById('ocrUpload').style.display = 'none';
+    document.getElementById('ocrPreview').style.display = 'none';
+    showOcrCompare();
+
+  } catch(err) {
+    document.getElementById('ocrResult').style.display = 'none';
+    showOcrError(err.message || 'Errore durante la lettura del PDF. Prova con una foto o l\'inserimento manuale.');
+  }
+}
 
 btnRetake.addEventListener('click', () => {
   currentImageFile = null;
