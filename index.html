@@ -3438,40 +3438,82 @@ function parsePayslip(text) {
     return null;
   }
 
-  // Pattern calibrati sul layout OSRA (Studio Venanzi / Consorzio Sacoph)
-  // NETTO IN BUSTA: il valore segue l'etichetta. Max 5000 per escludere "Lire 1.427.031".
-  result.netto = findAmount(['netto\\s+in\\s+busta', 'scatto\\s+maturato', 'netto.*pagare', 'netto a pag'], {window: 60, max: 5000, min: 50});
-  // TOTALE COMPETENZE / IMPORTO ORDINARIO
-  result.lordo = findAmount(['totale\\s+competenze', 'tot\\.?\\s*lordo\\s*sogg', 'importo\\s+ordinario', 'totale.*compet'], {window: 50, max: 5000, min: 50});
-  // FAP: dopo "CONTRIB.FAP 5.84%" ci sono "5,8400 788,00 46,02" → l'importo è l'ultimo.
-  // Cerco il valore della ritenuta saltando aliquota e imponibile. min 10 per evitare il 5,84.
-  result.inps = findAmountNth(['contrib\\.?\\s*fap', 'fap\\s*5'], 3, {window: 60, max: 500, min: 10})
-             || findAmount(['tot\\.?\\s*rit\\.?\\s*social'], {window: 50, max: 500, min: 10});
-  result.irpef = findAmount(['rit\\.?\\s*fis\\.?\\s*mese\\s*lorda', 'irpef.*netta', 'imposta.*netta'], {window: 50, max: 2000});
-  result.trattInt = findAmount(['trattamento.*integ', 'tratt.*integr', 'bonus.*100', 'l\\.?\\s*21/?20'], {window: 50, max: 500});
-  result.sommaInt = findAmount(['somma.*integr', 'l\\.?\\s*207', 'integrativa.*207'], {window: 50, max: 500});
-  result.addiz = findAmount(['addizion', 'add\\.\\s*regional', 'add\\.\\s*comunal'], {window: 50, max: 500});
-  result.fondoEst = findAmount(['fondo\\s+est'], {window: 30, max: 100});
-  result.tfr = findAmount(['accant\\.?\\s*tfr', 'tfr\\s+al\\s+\\d', 'quota\\s+tfr'], {window: 80, max: 1000, min: 1});
-  // GG lavorati: nel periodo "MM/AAAA - NomeMese 95,00 23 23" i giorni seguono le ore
-  result.ggLav = (function() {
-    const m = text.match(/\d{2}\/\d{4}\s*[-–]\s*\w+\s+\d+[,.]\d{2}\s+(\d{1,2})/i);
-    if (m) { const v = parseInt(m[1], 10); if (v > 0 && v <= 31) return v; }
-    return findHours(['gg\\.?\\s*lav', 'giorni\\s+lavorat']);
-  })();
-  result.base = findAmount(['retribuzione\\s+base', 'paga.*base', 'minimo.*tabel', 'retr.*base'], {window: 50, max: 5000});
-  // Ore lavorate: nel layout OSRA "ORE LAV." precede il numero, oppure "IMPORTO ORDINARIO 95,00"
-  result.oreLav = findHours(['ore\\s*lav\\.?', 'importo\\s+ordinario', 'ore.*ordin', 'ore.*lavorat'])
-               || (function(){
-                    // Fallback: dopo "MM/AAAA - NomeMese" segue il numero di ore
-                    const m = text.match(/\d{2}\/\d{4}\s*[-–]\s*\w+\s+(\d+[,.]\d{2})/i);
-                    if (m) { const v = parseFloat(m[1].replace(',', '.')); if (!isNaN(v) && v < 300) return v; }
-                    return null;
-                  })();
-  result.oreSupp = findHours(['ore.*suppl', 'lavoro.*suppl']);
-  result.oreStraord = findHours(['ore.*straord', 'straordinari']);
+  // ============================================================
+  // PATTERN ANCORATI AL TESTO REALE OSRA (verificati su PDF estratto da PDF.js)
+  // ============================================================
+  // Helper: cerca un pattern con gruppo di cattura e ritorna il numero catturato
+  function matchNum(regexStr, group) {
+    group = group || 1;
+    const re = new RegExp(regexStr, 'i');
+    const m = text.match(re);
+    if (m && m[group]) return parseItNum(m[group]);
+    return null;
+  }
+  function matchInt(regexStr, group) {
+    group = group || 1;
+    const re = new RegExp(regexStr, 'i');
+    const m = text.match(re);
+    if (m && m[group]) { const v = parseInt(m[group], 10); return isNaN(v) ? null : v; }
+    return null;
+  }
+
+  // NETTO: "Scatto maturato   737,00" (il netto in busta appare qui, l'intestazione no)
+  result.netto = matchNum('scatto\\s+maturato\\s+([\\d.]+,\\d{2})')
+              || matchNum('netto\\s+in\\s+busta\\s+([\\d.]+,\\d{2})')
+              || findAmount(['netto.*pagare'], {window: 40, max: 5000, min: 50});
+
+  // LORDO: "TOT.LORDO SOGG.CONTR   787,60" (la voce più affidabile)
+  result.lordo = matchNum('TOT\\.?\\s*LORDO\\s+SOGG\\.?\\s*CONTR\\s+([\\d.]+,\\d{2})')
+              || matchNum('IMPORTO\\s+ORDINARIO\\s+[\\d.]+,\\d{2}\\s+[\\d.]+,\\d+\\s+([\\d.]+,\\d{2})')
+              || matchNum('TOTALE\\s+COMPETENZE\\s+([\\d.]+,\\d{2})');
+
+  // FAP/INPS: "CONTRIB.FAP 5.84%   5,8400   788,00   46,02" → l'importo è il 3° numero (46,02)
+  result.inps = matchNum('CONTRIB\\.?\\s*FAP[^\\n]*?[\\d.]+,\\d{4}\\s+[\\d.]+,\\d{2}\\s+([\\d.]+,\\d{2})');
+
+  // IRPEF: nel cedolino la ritenuta lorda è coperta dalle detrazioni → netta = 0 (incapiente).
+  // Mostriamo la ritenuta lorda come riferimento ma la netta è 0.
+  const ritFisLorda = matchNum('Rit\\.?\\s*Fis\\.?\\s*mese\\s*lorda\\s+([\\d.]+,\\d{2})');
+  const detrazFiscali = matchNum('Detrazioni\\s+fiscali\\s+([\\d.]+,\\d{2})');
+  // IRPEF netta effettiva = max(0, lorda - detrazioni)
+  if (ritFisLorda !== null && detrazFiscali !== null) {
+    result.irpef = Math.max(0, ritFisLorda - detrazFiscali);
+  } else {
+    result.irpef = matchNum('irpef[^\\n]*?netta\\s+([\\d.]+,\\d{2})');
+  }
+  result.irpefLorda = ritFisLorda;
+
+  // Trattamento integrativo / somma integrativa (assenti nel cedolino reale)
+  result.trattInt = findAmount(['trattamento.*integ', 'bonus.*100', 'l\\.?\\s*21/?20'], {window: 40, max: 500});
+  result.sommaInt = findAmount(['somma.*integr', 'integrativa.*207'], {window: 40, max: 500});
+
+  // Addizionali (assenti a maggio)
+  result.addiz = findAmount(['add\\.\\s*regional', 'add\\.\\s*comunal', 'addizional'], {window: 40, max: 500});
+
+  // FONDO EST: "FONDO EST   2,00   2,00" → prendi il primo
+  result.fondoEst = matchNum('FONDO\\s+EST\\s+([\\d.]+,\\d{2})');
+
+  // TFR: "TFR Al 31/12/25   Codice CNEL 58,34" (il valore segue "Codice CNEL")
+  result.tfr = matchNum('TFR\\s+Al\\s+[\\d/]+\\s+Codice\\s+CNEL\\s+([\\d.]+,\\d{2})')
+            || matchNum('Codice\\s+CNEL\\s+([\\d.]+,\\d{2})');
+
+  // RETRIBUZIONE BASE
+  result.base = matchNum('RETRIBUZIONE\\s+BASE\\s*:?\\s*([\\d.]+,\\d{2})');
+
+  // ORE e GIORNI dal periodo: "05/2026 - Maggio   95,00   23   23   5   185"
+  const periodoMatch = text.match(/\d{2}\/\d{4}\s*-\s*\w+\s+([\d.]+,\d{2})\s+(\d+)\s+(\d+)/i);
+  if (periodoMatch) {
+    result.oreLav = parseItNum(periodoMatch[1]);
+    result.ggLav = parseInt(periodoMatch[2], 10);
+  } else {
+    result.oreLav = matchNum('IMPORTO\\s+ORDINARIO\\s+([\\d.]+,\\d{2})');
+    result.ggLav = null;
+  }
+  result.oreSupp = null;
+  result.oreStraord = null;
+
+  // PERIODO: "05/2026 - Maggio"
   result.periodo = (function() {
-    const m = text.match(/(\d{2})\/(\d{4})\s*[-–]\s*(\w+)/);
+    const m = text.match(/(\d{2})\/(\d{4})\s*-\s*([A-Za-zàèéìòù]+)/);
     if (m) return m[0];
     const m2 = text.match(/\b(0[1-9]|1[0-2])\/(\d{4})\b/);
     if (m2) return m2[0];
