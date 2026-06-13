@@ -557,27 +557,19 @@ button.btn.sm { padding: 10px 14px; font-size: .85rem; }
   </div>
 
   <div class="card accent">
-    <div class="label" style="margin-bottom: 8px;">Stipendio previsto a fine mese</div>
+    <div class="label" style="margin-bottom: 8px;">Maturato con le ore inserite</div>
     <div class="bignum mono" id="estLordo">€ 0<span class="cents">,00</span></div>
     <div style="display: flex; justify-content: space-between; margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(253,250,243,.2);">
       <div>
-        <div class="label">Netto previsto</div>
+        <div class="label">Netto maturato</div>
         <div class="mono" style="font-size: 1.2rem; font-weight: 600;" id="estNetto">€ 0,00</div>
       </div>
       <div style="text-align: right;">
-        <div class="label">Ore lavorate</div>
+        <div class="label">Ore inserite</div>
         <div class="mono" style="font-size: 1.2rem; font-weight: 600;" id="estOre">0,00 h</div>
       </div>
     </div>
-    <!-- MATURATO FINORA -->
-    <div style="margin-top: 14px; padding-top: 14px; border-top: 1px solid rgba(253,250,243,.2);">
-      <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 6px;">
-        <span class="label">Maturato finora</span>
-        <span class="mono" style="font-size: 1.05rem; font-weight: 700;" id="estMaturato">€ 0,00</span>
-      </div>
-      <div class="bar-track" style="height: 6px; background: rgba(253,250,243,.25);"><div class="bar-fill" id="estMaturatoBar" style="width: 0%; background: #fdfaf3;"></div></div>
-      <div class="tiny" style="margin-top: 5px; color: rgba(253,250,243,.7);" id="estMaturatoInfo">—</div>
-    </div>
+    <div class="tiny" style="margin-top: 12px; color: rgba(253,250,243,.7);" id="estMaturatoInfo">—</div>
   </div>
 
   <div class="grid-2">
@@ -1295,11 +1287,14 @@ const DEFAULT_CFG = {
   inps: 5.84, irpef: 23,
   bonus: 100, addiz: 25,
   // Voci fisse dal cedolino reale OSRA (Consorzio Sacoph)
-  fondoEst: 2.00,           // Fondo Est assistenza sanitaria
-  fondoSolidInps: 0.33,     // Fondo solidarietà residuale INPS (%)
-  ctrAssSan: 2.00,          // Contributo assistenza sanitaria dedotto
-  contingenza: 517.51,      // parte del minimo (info)
-  terzoElemento: 2.07       // 3° elemento (info)
+  fondoEst: 2.00,
+  fondoSolidInps: 0.33,
+  ctrAssSan: 2.00,
+  contingenza: 517.51,
+  terzoElemento: 2.07,
+  // Retribuzione DI FATTO mensile part-time (base+contingenza+3°el a tempo pieno × 62,5%)
+  // = 1392,80 × 0,625 = 870,50. Usata per 13ma, 14ma e TFR (non per lo stipendio a ore).
+  retribFatto: 870.50
 };
 
 let cfg = loadCfg();
@@ -1350,7 +1345,7 @@ function loadCfg() {
   const merged = {...DEFAULT_CFG, ...c};
   // Migrazione v2: allinea i valori contrattuali al cedolino reale di maggio 2026
   // (il vecchio default 870.50/8.29 era una stima; il cedolino conferma 873.22/8.29048)
-  if (!c._migratoCedolinoReale) {
+  if (!c._migratoCedolinoReale || !c.retribFatto) {
     merged.lordo = 873.22;
     merged.orario = 8.29048;
     merged.fondoEst = 2.00;
@@ -1358,6 +1353,7 @@ function loadCfg() {
     merged.ctrAssSan = 2.00;
     merged.contingenza = 517.51;
     merged.terzoElemento = 2.07;
+    merged.retribFatto = 870.50;
     merged._migratoCedolinoReale = true;
     save(STORE.cfg, merged);
   }
@@ -1656,45 +1652,28 @@ function renderDashboard() {
   document.getElementById('oreMagg').textContent = fmt.hours(m.supplementari + m.straordinarie);
   document.getElementById('livelloChip').textContent = cfg.livello + '° livello';
 
-  // ===== MATURATO FINORA =====
-  // Proporzionale ai giorni di CALENDARIO trascorsi del mese corrente
-  // (non ai turni inseriti, per evitare cifre fuorvianti a inizio mese)
+  // ===== INFO MATURATO =====
+  // Il valore grande è il netto maturato con le ORE INSERITE finora.
+  // Mostro un'info che chiarisce a che punto sei del mese.
   const oggiM = new Date();
   const annoVis = now.getFullYear();
   const meseVis = now.getMonth();
-  const giorniTotMese = new Date(annoVis, meseVis + 1, 0).getDate();
-  let giorniTrascorsi;
-  let infoMaturato;
-
-  // Considera l'inizio contratto se cade in questo mese
-  let primoGiornoUtile = 1;
-  if (cfg.inizio) {
-    const inizioC = new Date(cfg.inizio + 'T12:00:00');
-    if (inizioC.getFullYear() === annoVis && inizioC.getMonth() === meseVis) {
-      primoGiornoUtile = inizioC.getDate();
-    }
-  }
+  const oreTeoricheMeseInfo = Math.round(cfg.orePT * 4.333);
 
   if (oggiM.getFullYear() === annoVis && oggiM.getMonth() === meseVis) {
-    // Mese corrente: conta i giorni da primoGiornoUtile a oggi
-    giorniTrascorsi = Math.max(0, oggiM.getDate() - primoGiornoUtile + 1);
-    const giorniLavorabiliMese = giorniTotMese - primoGiornoUtile + 1;
-    const frazione = giorniLavorabiliMese > 0 ? giorniTrascorsi / giorniLavorabiliMese : 0;
-    const maturato = m.netto * frazione;
-    document.getElementById('estMaturato').textContent = fmt.eur(maturato);
-    document.getElementById('estMaturatoBar').style.width = Math.min(100, frazione * 100).toFixed(0) + '%';
-    infoMaturato = `Giorno ${giorniTrascorsi} di ${giorniLavorabiliMese} · ${(frazione*100).toFixed(0)}% del mese`;
-    document.getElementById('estMaturatoInfo').textContent = infoMaturato;
+    const oreInserite = m.totale;
+    const restano = Math.max(0, oreTeoricheMeseInfo - oreInserite);
+    if (oreInserite < oreTeoricheMeseInfo - 1) {
+      document.getElementById('estMaturatoInfo').textContent =
+        `Basato su ${fmt.hours(oreInserite)} inserite. A mese pieno (~${oreTeoricheMeseInfo}h) il netto sarà circa ${fmt.eur(m.netto / Math.max(oreInserite,1) * oreTeoricheMeseInfo)}.`;
+    } else {
+      document.getElementById('estMaturatoInfo').textContent =
+        `Mese completo: ${fmt.hours(oreInserite)} inserite.`;
+    }
   } else if (oggiM < new Date(annoVis, meseVis, 1)) {
-    // Mese futuro: niente maturato
-    document.getElementById('estMaturato').textContent = fmt.eur(0);
-    document.getElementById('estMaturatoBar').style.width = '0%';
-    document.getElementById('estMaturatoInfo').textContent = 'Mese non ancora iniziato';
+    document.getElementById('estMaturatoInfo').textContent = 'Mese non ancora iniziato.';
   } else {
-    // Mese passato: maturato completo
-    document.getElementById('estMaturato').textContent = fmt.eur(m.netto);
-    document.getElementById('estMaturatoBar').style.width = '100%';
-    document.getElementById('estMaturatoInfo').textContent = 'Mese completato';
+    document.getElementById('estMaturatoInfo').textContent = `Mese completato: ${fmt.hours(m.totale)} totali.`;
   }
 
   // Composizione (allineata al cedolino reale OSRA)
@@ -2084,7 +2063,7 @@ function renderMensilitaAggiuntive() {
   const tredInizio = new Date(annoCorrente, 0, 1);   // 1 gennaio
   const tredFine = new Date(annoCorrente, 11, 31);    // 31 dicembre
   const tredMesi = mesiMaturati(tredInizio, tredFine);
-  const tredLordo = cfg.lordo * tredMesi / 12;
+  const tredLordo = ( cfg.retribFatto || cfg.lordo ) * tredMesi / 12;
   const tredCalc = nettoMensilitaAggiuntiva(tredLordo);
 
   document.getElementById('tredicesimaNetto').textContent = fmt.eur(tredCalc.netto);
@@ -2107,7 +2086,7 @@ function renderMensilitaAggiuntive() {
     quattAnnoArrivo = annoCorrente + 1;
   }
   const quattMesi = mesiMaturati(quattInizio, quattFine);
-  const quattLordo = cfg.lordo * quattMesi / 12;
+  const quattLordo = ( cfg.retribFatto || cfg.lordo ) * quattMesi / 12;
   const quattCalc = nettoMensilitaAggiuntiva(quattLordo);
 
   document.getElementById('quattordicesimaNetto').textContent = fmt.eur(quattCalc.netto);
@@ -2157,7 +2136,7 @@ function openMensilitaDettaglio(tipo) {
     quandoStr = `La quattordicesima viene erogata con lo stipendio di luglio ${annoArrivo}. A differenza della tredicesima, il suo periodo di maturazione è "spostato": va da luglio a giugno dell'anno successivo. Per questo la prima quattordicesima (luglio ${annoArrivo}) conterà solo i mesi da quando hai iniziato.`;
   }
 
-  lordo = cfg.lordo * mesi / 12;
+  lordo = ( cfg.retribFatto || cfg.lordo ) * mesi / 12;
   calc = nettoMensilitaAggiuntiva(lordo);
 
   document.getElementById('mensTitle').textContent = nome;
