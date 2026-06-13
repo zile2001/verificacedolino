@@ -372,17 +372,19 @@ $("genBtn").onclick=async ()=>{
   for(let i=0;i<bin.length;i++) bytes[i]=bin.charCodeAt(i);
   const wb=new ExcelJS.Workbook();
   await wb.xlsx.load(bytes.buffer);
-  store.sheets.forEach((sh,si)=>{
-   const ws=wb.worksheets.find(w=>w.name.trim()===sh.match);
-   if(!ws)return;
-   // aggiorna il mese/anno in B1 (es. "TRAGES 12.2025" -> "TRAGES 01.2025")
-   // mantenendo il nome del punto vendita; sostituisce solo MM.AAAA
-   if(pdfDate){
+  // aggiorna il mese/anno in B1 di TUTTI i fogli (ZUCCHETTI + BILANCIO + altri)
+  // sostituendo solo MM.AAAA dal PDF, mantenendo il nome del punto vendita
+  if(pdfDate){
+   wb.worksheets.forEach(ws=>{
     const b1=ws.getCell("B1");
     if(typeof b1.value==="string" && /\d{2}\.\d{4}/.test(b1.value)){
      b1.value=b1.value.replace(/\d{2}\.\d{4}/, `${pdfDate.mm}.${pdfDate.yyyy}`);
     }
-   }
+   });
+  }
+  store.sheets.forEach((sh,si)=>{
+   const ws=wb.worksheets.find(w=>w.name.trim()===sh.match);
+   if(!ws)return;
    rows.filter(r=>r.sheet===si).forEach(r=>{
     const cell=ws.getCell(r.cell);   // mantiene font/bordi/formato/colore
     if(r.isMul){
